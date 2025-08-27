@@ -422,6 +422,11 @@ class EoepcaCalrissianRunnerExecutionHandler(ExecutionHandler):
 
     def get_secrets(self):
         logger.info("get_secrets")
+        secrets={
+            "imagePullSecrets": self.local_get_file("/assets/pod_imagePullSecrets.yaml"),
+            "additionalImagePullSecrets": self.local_get_file("/assets/pod_additionalImagePullSecrets.yaml")
+        }
+        return secrets
 
         return self.local_get_file("/assets/pod_imagePullSecrets.yaml")
 
