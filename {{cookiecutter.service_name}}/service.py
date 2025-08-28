@@ -501,7 +501,7 @@ def {{cookiecutter.workflow_id |replace("-", "_")  }}(conf, inputs, outputs): # 
             cwl = yaml.safe_load(stream)
 
         execution_handler = EoepcaCalrissianRunnerExecutionHandler(conf=conf)
-        logger.info("cookiecutter: using conf: "+ runner.get_namespace_name())
+        logger.info("cookiecutter: using conf: "+ str(conf))
 
         # Add stageout data analysis
         finalized_cwl = cwl_helper.finalize_cwl(cwl)
