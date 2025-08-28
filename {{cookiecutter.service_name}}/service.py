@@ -221,90 +221,6 @@ class EoepcaCalrissianRunnerExecutionHandler(ExecutionHandler):
             logger.info("Post execution hook")
             self.unset_http_proxy_env()
 
-            # DEBUG
-            # logger.info(f"zzz POST-HOOK - config...\n{json.dumps(self.conf, indent=2)}\n")
-
-            logger.info("Set user bucket settings")
-            os.environ["AWS_S3_ENDPOINT"] = self.conf["additional_parameters"]["STAGEOUT_AWS_SERVICEURL"]
-            os.environ["AWS_ACCESS_KEY_ID"] = self.conf["additional_parameters"]["STAGEOUT_AWS_ACCESS_KEY_ID"]
-            os.environ["AWS_SECRET_ACCESS_KEY"] = self.conf["additional_parameters"]["STAGEOUT_AWS_SECRET_ACCESS_KEY"]
-            os.environ["AWS_REGION"] = self.conf["additional_parameters"]["STAGEOUT_AWS_REGION"]
-
-            StacIO.set_default(CustomStacIO)
-
-            logger.info(f"Read catalog => STAC Catalog URI: {output['StacCatalogUri']}")
-            try:
-                s3_path = output["StacCatalogUri"]
-                if s3_path.count("s3://")==0:
-                    s3_path = "s3://" + s3_path
-                cat = read_file( s3_path )
-            except Exception as e:
-                logger.error(f"Exception: {e}")
-
-            collection_id = self.conf["additional_parameters"]["collection_id"]
-            logger.info(f"Create collection with ID {collection_id}")
-            collection = None
-            try:
-                collection = next(cat.get_all_collections())
-                logger.info("Got collection from outputs")
-            except:
-                try:
-                    items=cat.get_all_items()
-                    itemFinal=[]
-                    for i in items:
-                        for a in i.assets.keys():
-                            cDict=i.assets[a].to_dict()
-                            cDict["storage:platform"]="EOEPCA"
-                            cDict["storage:requester_pays"]=False
-                            cDict["storage:tier"]="Standard"
-                            cDict["storage:region"]=self.conf["additional_parameters"]["STAGEOUT_AWS_REGION"]
-                            cDict["storage:endpoint"]=self.conf["additional_parameters"]["STAGEOUT_AWS_SERVICEURL"]
-                            i.assets[a]=i.assets[a].from_dict(cDict)
-                        i.collection_id=collection_id
-                        itemFinal+=[i.clone()]
-                    collection = ItemCollection(items=itemFinal)
-                    logger.info("Created collection from items")
-                except Exception as e:
-                    logger.error(f"Exception: {e}"+str(e))
-            
-            # Trap the case of no output collection
-            if collection is None:
-                logger.error("ABORT: The output collection is empty")
-                self.feature_collection = json.dumps({}, indent=2)
-                return
-
-            collection_dict=collection.to_dict()
-            collection_dict["id"]=collection_id
-
-            # Set the feature collection to be returned
-            self.feature_collection = json.dumps(collection_dict, indent=2)
-
-            # Register with the workspace catalogue
-            if self.workspace_catalog_register:
-                logger.info(f"Register collection in workspace {self.workspace_prefix}-{self.username}")
-                headers = {
-                    "Accept": "application/json",
-                }
-                if self.ades_rx_token:
-                    headers["Authorization"] = f"Bearer {self.ades_rx_token}"
-                api_endpoint = f"{self.workspace_url}/workspaces/{self.workspace_prefix}-{self.username}"
-                r = requests.post(
-                    f"{api_endpoint}/register-json",
-                    json=collection_dict,
-                    headers=headers,
-                )
-                logger.info(f"Register collection response: {r.status_code}")
-
-                # TODO pool the catalog until the collection is available
-                #self.feature_collection = requests.get(
-                #    f"{api_endpoint}/collections/{collection.id}", headers=headers
-                #).json()
-            
-                logger.info(f"Register processing results to collection")
-                r = requests.post(f"{api_endpoint}/register",
-                                json={"type": "stac-item", "url": collection.get_self_href()},
-                                headers=headers,)
-                logger.info(f"Register processing results response: {r.status_code}")
 
         except Exception as e:
             logger.error("ERROR in post_execution_hook...")
@@ -501,7 +417,6 @@ def {{cookiecutter.workflow_id |replace("-", "_")  }}(conf, inputs, outputs): # 
             cwl = yaml.safe_load(stream)
 
         execution_handler = EoepcaCalrissianRunnerExecutionHandler(conf=conf)
-        logger.info("cookiecutter: using conf: "+ str(conf))
 
         # Add stageout data analysis
         finalized_cwl = cwl_helper.finalize_cwl(cwl)
@@ -511,7 +426,8 @@ def {{cookiecutter.workflow_id |replace("-", "_")  }}(conf, inputs, outputs): # 
             conf=conf,
             inputs=inputs,
             outputs=outputs,
-            execution_handler=execution_handler
+            execution_handler=execution_handler,
+            dedicated_namespace=False
         )
         # DEBUG
         # runner.monitor_interval = 1
