@@ -114,7 +114,7 @@ class EoepcaCalrissianRunnerExecutionHandler(ExecutionHandler):
             self.use_workspace = True
         else:
             self.use_workspace = False
-        logger.info("init workspace " + str(self.workspace_url)+"   "+str(self.workspace_prefix) +"   "+str(self.use_workspace))
+        logger.info("init workspace " + str(self.workspace_url)+"  ! "+str(self.workspace_prefix) +" !  "+str(self.use_workspace))
 
         # Should outputs be registered to the Workspace Catalogue?
         # Only if we are using the Workspace, and catalogue registration has been specified.
@@ -428,8 +428,6 @@ class EoepcaCalrissianRunnerExecutionHandler(ExecutionHandler):
         }
         return secrets
 
-        return self.local_get_file("/assets/pod_imagePullSecrets.yaml")
-
     def get_additional_parameters(self):
         logger.info("get_additional_parameters")
         # sets the additional parameters for the execution
@@ -503,6 +501,7 @@ def {{cookiecutter.workflow_id |replace("-", "_")  }}(conf, inputs, outputs): # 
             cwl = yaml.safe_load(stream)
 
         execution_handler = EoepcaCalrissianRunnerExecutionHandler(conf=conf)
+        logger.info("cookiecutter: using conf: "+ runner.get_namespace_name())
 
         # Add stageout data analysis
         finalized_cwl = cwl_helper.finalize_cwl(cwl)
@@ -519,7 +518,7 @@ def {{cookiecutter.workflow_id |replace("-", "_")  }}(conf, inputs, outputs): # 
 
         # we are changing the working directory to store the outputs
         # in a directory dedicated to this execution
-        logger.info("using namespace: "+ runner.get_namespace_name())
+        logger.info("cookiecutter: using namespace: "+ runner.get_namespace_name())
         working_dir = os.path.join(conf["main"]["tmpPath"], runner.get_namespace_name())
         os.makedirs(
             working_dir,
