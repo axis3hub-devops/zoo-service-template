@@ -12,6 +12,7 @@ dependencies = [
 
 [dependency-groups]
 dev = [
+    "cwl-utils>=0.40",
     "pytest>=8.3.4",
     "pytest-cov>=6.0.0",
 ]

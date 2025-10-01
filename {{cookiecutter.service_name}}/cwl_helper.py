@@ -1,10 +1,11 @@
-def update_workflow_graph(workflow_graph):
-    workflow_graph["steps"]["data_analysis_results_interceptor"] = {
-            "run": "#data_analysis_results_interceptor",
-            "in": {"execution_results": "analyse/data_analysis_results"},
-            "out": ["data_analysis_results_interceptor_results"],
-        }
-    workflow_graph["steps"]["process"]["in"]["data_analysis_results_interceptor_results"] = "data_analysis_results_interceptor/data_analysis_results_interceptor_results"
+def update_workflow_graph(workflow_graph, is_indexing: bool = True):
+    if is_indexing:
+        workflow_graph["steps"]["data_analysis_results_interceptor"] = {
+                "run": "#data_analysis_results_interceptor",
+                "in": {"execution_results": "analyse/data_analysis_results"},
+                "out": ["data_analysis_results_interceptor_results"],
+            }
+        workflow_graph["steps"]["process"]["in"]["data_analysis_results_interceptor_results"] = "data_analysis_results_interceptor/data_analysis_results_interceptor_results"
     workflow_graph["steps"]["process_results_interceptor"] = {
             "run": "#process_results_interceptor",
             "in": {"execution_results": "process/process_results"},
@@ -94,17 +95,18 @@ def add_process_results_interceptor_graph():
         }
     }
 
-def finalize_cwl(cwl):
+def finalize_cwl(cwl, is_indexing: bool = True):
     graphs = cwl["$graph"]
     for graph in graphs:
         if graph["class"] == "Workflow":
-            updated_workflow_graph = update_workflow_graph(graph)
+            updated_workflow_graph = update_workflow_graph(graph, is_indexing)
             graphs.remove(graph)
             graphs.append(updated_workflow_graph)
-        if graph["class"] == "CommandLineTool" and graph["id"] == "process":
+        if is_indexing and graph["class"] == "CommandLineTool" and graph["id"] == "process":
             updated_process_graph = update_process_graph(graph)
             graphs.remove(graph)
             graphs.append(updated_process_graph)
-    graphs.append(add_data_analysis_results_interceptor_graph())
+    if is_indexing:
+        graphs.append(add_data_analysis_results_interceptor_graph())
     graphs.append(add_process_results_interceptor_graph())
     return cwl

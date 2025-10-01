@@ -43,8 +43,14 @@ class EoepcaCalrissianRunnerExecutionHandler(ExecutionHandler):
     def __init__(self, conf, dedicated_namespace=False, vault_injector=False):
         super().__init__()
         self.conf = conf
+
         self.thematic_service_name = "internal"
         self._set_thematic_service_input()
+        logger.info("Thematic service name: " + self.thematic_service_name)
+
+        self.process_scope = "indexing"
+        self._set_process_scope_input()
+        logger.info("Process scope: " + self.process_scope)
 
         self.http_proxy_env = os.environ.get("HTTP_PROXY", None)
 
@@ -62,7 +68,18 @@ class EoepcaCalrissianRunnerExecutionHandler(ExecutionHandler):
             service_name = json.loads(input_request)['inputs']['thematic_service_name']
             self.thematic_service_name = service_name
         except Exception as e:
-            logger.info("Setting thematice service name issue: " + str(e))
+            logger.info("Setting thematic service name issue: " + str(e))
+
+    def _set_process_scope_input(self):
+        logger.info("Adding Process scope")
+        try:
+            input_request = self.conf['request']['jrequest']
+            logger.info("Input_request: "+ str(input_request))
+            json_inputs = json.loads(input_request)['inputs']
+            if "scope" in json_inputs:
+                self.process_scope = json_inputs['scope']
+        except Exception as e:
+            logger.info("Setting process scope issue: " + str(e))
 
     def pre_execution_hook(self):
         try:
@@ -75,10 +92,14 @@ class EoepcaCalrissianRunnerExecutionHandler(ExecutionHandler):
             self.conf["additional_parameters"]["collection_id"] = lenv.get("usid", "")
             self.conf["additional_parameters"]["process"] = os.path.join("processing-results", self.conf["additional_parameters"]["collection_id"])
 
-            stageout_yaml = yaml.safe_load(open("/assets/stageout.yaml","rb"))
-            logger.info("WRAPPER_STAGE_OUT" in os.environ)
+            stageout_path = "/assets/stageout.yaml"
+            if self.process_scope == "generic":
+                stageout_path = "/assets/stageout_generic.yaml"
+            logger.info("Stageout path: " + stageout_path)
 
+            stageout_yaml = yaml.safe_load(open(stageout_path,"rb"))
             self.stageout_file_path = f"/{self.conf['main']['tmpPath']}/stageout{self.conf['lenv']['usid']}.yaml"
+            logger.info("Stageout file path: " + self.stageout_file_path)
             stageout_file=open(self.stageout_file_path,"w")
             yaml.dump(stageout_yaml,stageout_file)
             stageout_file.close()
@@ -360,8 +381,13 @@ def {{cookiecutter.workflow_id |replace("-", "_")  }}(conf, inputs, outputs): # 
             vault_injector=use_vault_injector
         )
 
-        # Add stageout data analysis
-        finalized_cwl = cwl_helper.finalize_cwl(cwl)
+        input_request = conf['request']['jrequest']
+        json_input_request = json.loads(input_request)
+        json_inputs = json.loads(input_request)['inputs']
+        process_scope = "indexing"
+        if "scope" in json_inputs and json_inputs["scope"] == "generic":
+            process_scope = "generic"
+        finalized_cwl = cwl_helper.finalize_cwl(cwl, process_scope == "indexing")
 
         runner = ZooCalrissianRunner(
             cwl=finalized_cwl,
