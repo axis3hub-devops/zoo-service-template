@@ -413,7 +413,6 @@ class EoepcaCalrissianRunnerExecutionHandler(ExecutionHandler):
                 }
                 for tool_log in (tool_logs or [])
             ]
-
             # If no logs, just set length=0 and return
             if not servicesLogs:
                 self.conf["service_logs"]["length"] = "0"
@@ -436,6 +435,7 @@ class EoepcaCalrissianRunnerExecutionHandler(ExecutionHandler):
 
             # Length of *this* batch
             self.conf["service_logs"]["length"] = str(len(servicesLogs))
+            logger.info(f"servicesLogs{str( self.conf["service_logs"])}")
 
         except Exception as e:
             logger.error("ERROR in handle_outputs...")
