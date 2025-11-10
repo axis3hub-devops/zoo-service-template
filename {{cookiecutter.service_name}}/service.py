@@ -435,7 +435,6 @@ class EoepcaCalrissianRunnerExecutionHandler(ExecutionHandler):
 
             # Length of *this* batch
             self.conf["service_logs"]["length"] = str(len(servicesLogs))
-            logger.info(f"servicesLogs{str( self.conf["service_logs"])}")
 
         except Exception as e:
             logger.error("ERROR in handle_outputs...")
