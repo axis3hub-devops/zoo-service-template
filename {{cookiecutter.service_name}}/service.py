@@ -3,6 +3,7 @@ import pathlib
 import sys
 from typing import Dict
 from pathlib import Path
+import boto3
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import cwl_helper
@@ -114,17 +115,95 @@ class EoepcaCalrissianRunnerExecutionHandler(ExecutionHandler):
         finally:
             self.restore_http_proxy_env()
 
+    def upload_logs_to_s3(self, s3_bucket: str, process_id: str, tool_logs: list = None,
+                          aws_access_key_id=None, aws_secret_access_key=None):
+        """
+        Upload log files to S3:
+        - Uploads each file from `tool_logs` (assumed relative to workdir).
+        - Skips interceptor logs.
+        Files are uploaded to s3://<bucket>/<process_id>/<filename>.
+        """
+        region_name = self.conf['pod_env_vars'].get("AWS_DEFAULT_REGION")
+        endpoint_url = self.conf['pod_env_vars'].get("AWS_ENDPOINT_URL")
+        logger.info(f"pod_env_vars {str(self.conf['pod_env_vars'])}")
+        try:
+            logger.info(
+                f"Creating S3 client "
+                f"(endpoint={endpoint_url}, region={region_name}, "
+                f"access_key={aws_access_key_id})"
+                f"secret={aws_secret_access_key})"
+            )
+            s3 = boto3.client(
+                        "s3",
+                        aws_access_key_id=str(aws_access_key_id),
+                        aws_secret_access_key=str(aws_secret_access_key),
+                        region_name=region_name,
+                        endpoint_url=endpoint_url,
+                    )
+
+        except Exception as e:
+            logger.error(
+                f"Failed to create S3 client (endpoint={endpoint_url}, region={region_name}): {e}"
+            )
+            return
+
+        if not tool_logs:
+            logger.error("No tool logs were found!")
+            return
+
+        # Construct the execution workdir
+        workdir_name = f"{(self.conf['lenv']['Identifier']).replace('_', '-')}-{self.conf['lenv']['usid']}"
+        workdir = os.path.join(self.conf["main"]["tmpPath"], workdir_name)
+
+        # Logs to skip
+        skip_logs = {
+            "./data_analysis_results_interceptor.log",
+            "./process_results_interceptor.log",
+            "./node_stage_out.log",
+        }
+
+        for tlog in tool_logs:
+            if tlog in skip_logs:
+                logger.info(f"Skipping tool log {tlog}")
+                continue
+
+            # Build absolute path under the workdir
+            log_path = os.path.join(workdir, tlog.lstrip("./"))
+            logger.debug(f"Resolved tool log '{tlog}' → '{log_path}'")
+
+            if not os.path.isfile(log_path):
+                logger.info(f"Tool log not found: {log_path}")
+                continue
+
+            fname = os.path.basename(log_path)
+            key = f"processing-results/{process_id}/console_{fname}"
+
+            try:
+                s3.upload_file(log_path, s3_bucket, key)
+                logger.info(f"Uploaded tool log {log_path}  s3://{s3_bucket}/{key}")
+            except Exception as e:
+                logger.error(f"Failed to upload tool log {log_path}: {e}")
+
     def post_execution_hook(self, log, output, usage_report, tool_logs):
         try:
             logger.info("Post execution hook")
             self.unset_http_proxy_env()
 
+            # Resolve S3 bucket
+            bucket = self._get_env_var("S3_BUCKET_ADDRESS")
+            process_id = self.conf["lenv"]["usid"]
+            aws_access_key_id  = self._get_env_var("AWS_ACCESS_KEY_ID")
+            aws_secret_access_key =  self._get_env_var("AWS_SECRET_ACCESS_KEY_ID")
+
+            # Upload only CWL tool logs
+            logger.info(f"Uploading tool logs to s3://{bucket}/processing-results/{process_id}/")
+            tool_logs.append("./report.json")
+            self.upload_logs_to_s3(bucket, process_id, tool_logs, aws_access_key_id, aws_secret_access_key)
 
         except Exception as e:
             logger.error("ERROR in post_execution_hook...")
             logger.error(traceback.format_exc())
-            raise(e)
-        
+            raise e
         finally:
             self.restore_http_proxy_env()
 
@@ -422,10 +501,12 @@ def {{cookiecutter.workflow_id |replace("-", "_")  }}(conf, inputs, outputs): # 
         if exit_status == zoo.SERVICE_SUCCEEDED:
             logger.info(f"Setting Collection into output key {list(outputs.keys())[0]}")
             outputs[list(outputs.keys())[0]]["value"] = execution_handler.feature_collection
+            conf["lenv"]["message"] = zoo._("Execution success.")
             return zoo.SERVICE_SUCCEEDED
-
         else:
-            conf["lenv"]["message"] = zoo._("Execution failed")
+            msg = runner.get_termination_reason()
+            conf["lenv"]["message"] = json.dumps(msg)
+            logger.error(f"Execution failed: {msg}")
             return zoo.SERVICE_FAILED
 
     except Exception as e:
