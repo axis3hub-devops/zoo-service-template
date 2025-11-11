@@ -153,7 +153,8 @@ class EoepcaCalrissianRunnerExecutionHandler(ExecutionHandler):
 
         # Construct the execution workdir
         workdir_name = f"{(self.conf['lenv']['Identifier']).replace('_', '-')}-{self.conf['lenv']['usid']}"
-        workdir = os.path.join(self.conf["main"]["tmpPath"], workdir_name)
+        # 63 chars is the maximum len of the folder names this is zoo/calrissian
+        workdir = os.path.join(self.conf["main"]["tmpPath"], workdir_name[:63])
 
         # Logs to skip
         skip_logs = {
