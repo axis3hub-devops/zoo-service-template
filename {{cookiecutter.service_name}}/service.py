@@ -178,6 +178,9 @@ class EoepcaCalrissianRunnerExecutionHandler(ExecutionHandler):
 
             fname = os.path.basename(log_path)
             key = f"processing-results/{process_id}/console_{fname}"
+            if "report.json" in log_path:
+                fname = "report.log"
+                key = f"processing-results/{process_id}/{fname}"
 
             try:
                 s3.upload_file(log_path, s3_bucket, key)
@@ -198,8 +201,15 @@ class EoepcaCalrissianRunnerExecutionHandler(ExecutionHandler):
 
             # Upload only CWL tool logs
             logger.info(f"Uploading tool logs to s3://{bucket}/processing-results/{process_id}/")
-            tool_logs.append("./report.json")
-            self.upload_logs_to_s3(bucket, process_id, tool_logs, aws_access_key_id, aws_secret_access_key)
+            if tool_logs is not None:
+                tool_logs.append("./report.json")
+                self.upload_logs_to_s3(
+                    bucket,
+                    process_id,
+                    tool_logs,
+                    aws_access_key_id,
+                    aws_secret_access_key
+                )
 
         except Exception as e:
             logger.error("ERROR in post_execution_hook...")
