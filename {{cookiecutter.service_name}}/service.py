@@ -7,8 +7,13 @@ import boto3
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import cwl_helper
-from utils import THEMATIC_SERVICES_KUBERNETES_MAPPING, \
-    THEMATIC_SERVICES_VAULT_MAPPING
+
+
+# Get from vault
+THEMATIC_SERVICES_KUBERNETES_MAPPING = {}
+
+THEMATIC_SERVICES_VAULT_MAPPING = {}
+
 
 try:
     import zoo
@@ -44,9 +49,14 @@ class EoepcaCalrissianRunnerExecutionHandler(ExecutionHandler):
     def __init__(self, conf, dedicated_namespace=False, vault_injector=False):
         super().__init__()
         self.conf = conf
-
         self.thematic_service_name = "internal"
-        self._set_thematic_service_input()
+
+        # Setup vault, service template config, thematic service config
+        # and processing
+        self._set_service_template_config()
+        self._set_thematic_service_config()
+        self._set_processing_stageout_config()
+
         logger.info("Thematic service name: " + self.thematic_service_name)
 
         self.process_scope = "indexing"
@@ -61,26 +71,73 @@ class EoepcaCalrissianRunnerExecutionHandler(ExecutionHandler):
             raise Exception("Cannot use vault injector without dedicated namespace and service account")
         self.feature_collection = None
 
-    def _set_thematic_service_input(self):
-        logger.info("Adding Thematic service name ")
+    def _set_service_template_config(self):
+        logger.info("Adding Thematic service configuration ")
+        try:
+            self.vault_user = self.conf['pod_env_vars']["VAULT_USER"]
+            self.vault_password = self.conf['pod_env_vars']["VAULT_PASSWORD"]
+            self.vault_url = self.conf['pod_env_vars']["VAULT_URL"]
+            self.aws_access_key_id  = self.conf['pod_env_vars']["AWS_ACCESS_KEY_ID"]
+            self.aws_secret_access_key =  self.conf['pod_env_vars']["AWS_SECRET_ACCESS_KEY"]
+        except Exception as e:
+            logger.error("Setting  service template issue: " + str(e))
+            logger.error(traceback.format_exc())
+            raise(e)
+
+    def _set_thematic_service_config(self):
+        logger.info("Adding Thematic service configuration ")
         try:
             input_request = self.conf['request']['jrequest']
             logger.info("Input_request: "+ str(input_request))
             service_name = json.loads(input_request)['inputs']['thematic_service_name']
             self.thematic_service_name = service_name
+            self.thematic_service_env_vars = {}
+            self.thematic_service_vault_path = self._get_env_var("VAULT_PATH")
+            self.thematic_service_env_vars = cwl_helper.get_vault_secret_values(
+                self.thematic_service_vault_path,
+                self.vault_user,
+                self.vault_password,
+                self.vault_url
+            )
+            self.thematic_service_env_vars["VAULT_PATH"] = self.thematic_service_vault_path 
+            self.thematic_service_env_vars["VAULT_URL"] = self.vault_url
         except Exception as e:
-            logger.info("Setting thematic service name issue: " + str(e))
+            logger.error("Setting thematic service config issue: " + str(e))
+            logger.error(traceback.format_exc())
+            raise(e)
+
+    def _set_processing_stageout_config(self):
+        logger.info("Adding processing stageout configuration ")
+        try:
+
+            self.processing_stageout_vault_path = self.conf['pod_env_vars']["VAULT_PATH_STAGEOUT"]
+            self.processing_stageout_env_vars = {}
+            self.processing_stageout_image = self.conf['pod_env_vars']["PROCESSING_STAGEOUT_IMAGE"]
+            self.processing_stageout_env_vars = cwl_helper.get_vault_secret_values(
+                self.processing_stageout_vault_path,
+                self.vault_user,
+                self.vault_password,
+                self.vault_url
+            )
+            logger.info("processing_stageout_env_vars: "+ str(self.processing_stageout_env_vars))
+            self.s3_bucket_name = self._get_env_var("S3_BUCKET_ADDRESS")
+            self.processing_stageout_env_vars["S3_BUCKET_NAME"] = self.s3_bucket_name
+        except Exception as e:
+            logger.error("Setting processing stageout config issue: " + str(e))
+            logger.error(traceback.format_exc())
+            raise(e)
 
     def _set_process_scope_input(self):
         logger.info("Adding Process scope")
         try:
             input_request = self.conf['request']['jrequest']
-            logger.info("Input_request: "+ str(input_request))
             json_inputs = json.loads(input_request)['inputs']
             if "scope" in json_inputs:
                 self.process_scope = json_inputs['scope']
         except Exception as e:
-            logger.info("Setting process scope issue: " + str(e))
+            logger.error("Setting process scope issue: " + str(e))
+            logger.error(traceback.format_exc())
+            raise(e)
 
     def pre_execution_hook(self):
         try:
@@ -92,21 +149,6 @@ class EoepcaCalrissianRunnerExecutionHandler(ExecutionHandler):
                 self.conf["additional_parameters"] = {}
             self.conf["additional_parameters"]["collection_id"] = lenv.get("usid", "")
             self.conf["additional_parameters"]["process"] = os.path.join("processing-results", self.conf["additional_parameters"]["collection_id"])
-
-            stageout_path = "/assets/stageout.yaml"
-            if self.process_scope == "generic":
-                stageout_path = "/assets/stageout_generic.yaml"
-            logger.info("Stageout path: " + stageout_path)
-
-            stageout_yaml = yaml.safe_load(open(stageout_path,"rb"))
-            self.stageout_file_path = f"/{self.conf['main']['tmpPath']}/stageout{self.conf['lenv']['usid']}.yaml"
-            logger.info("Stageout file path: " + self.stageout_file_path)
-            stageout_file=open(self.stageout_file_path,"w")
-            yaml.dump(stageout_yaml,stageout_file)
-            stageout_file.close()
-            os.environ["WRAPPER_STAGE_OUT"] = self.stageout_file_path
-            logger.info("WRAPPER_STAGE_OUT" in os.environ)
-
         except Exception as e:
             logger.error("ERROR in pre_execution_hook...")
             logger.error(traceback.format_exc())
@@ -178,12 +220,23 @@ class EoepcaCalrissianRunnerExecutionHandler(ExecutionHandler):
 
             fname = os.path.basename(log_path)
             key = f"processing-results/{process_id}/console_{fname}"
+            if "report.json" in log_path:
+                fname = "report.log"
+                key = f"processing-results/{process_id}/{fname}"
 
             try:
                 s3.upload_file(log_path, s3_bucket, key)
                 logger.info(f"Uploaded tool log {log_path}  s3://{s3_bucket}/{key}")
             except Exception as e:
                 logger.error(f"Failed to upload tool log {log_path}: {e}")
+
+    def _get_env_var(self, prefix):
+        identifier = '{}_{}'.format(prefix, self.thematic_service_name.upper())
+        value = self.conf['pod_env_vars'].get(identifier)
+
+        if not value:
+            raise ValueError("No env var found named {}".format(identifier))
+        return value
 
     def post_execution_hook(self, log, output, usage_report, tool_logs):
         try:
@@ -193,13 +246,19 @@ class EoepcaCalrissianRunnerExecutionHandler(ExecutionHandler):
             # Resolve S3 bucket
             bucket = self._get_env_var("S3_BUCKET_ADDRESS")
             process_id = self.conf["lenv"]["usid"]
-            aws_access_key_id  = self._get_env_var("AWS_ACCESS_KEY_ID")
-            aws_secret_access_key =  self._get_env_var("AWS_SECRET_ACCESS_KEY_ID")
+
 
             # Upload only CWL tool logs
             logger.info(f"Uploading tool logs to s3://{bucket}/processing-results/{process_id}/")
-            tool_logs.append("./report.json")
-            self.upload_logs_to_s3(bucket, process_id, tool_logs, aws_access_key_id, aws_secret_access_key)
+            if tool_logs is not None:
+                tool_logs.append("./report.json")
+                self.upload_logs_to_s3(
+                    bucket,
+                    process_id,
+                    tool_logs,
+                self.aws_access_key_id,
+                self.aws_secret_access_key
+                )
 
         except Exception as e:
             logger.error("ERROR in post_execution_hook...")
@@ -245,13 +304,6 @@ class EoepcaCalrissianRunnerExecutionHandler(ExecutionHandler):
         except yaml.scanner.ScannerError:
             return {}
 
-    def _get_env_var(self, prefix):
-        identifier = '{}_{}'.format(prefix, self.thematic_service_name.upper())
-        value = self.conf['pod_env_vars'].get(identifier)
-        if not value:
-            raise ValueError("No env var found named {}".format(identifier))
-        return value
-
     def get_namespace(self):
         """Returns the namespace based on the thematic_service_name"""
         # Check if the thematic_service_name is mapped
@@ -278,22 +330,18 @@ class EoepcaCalrissianRunnerExecutionHandler(ExecutionHandler):
     def get_pod_env_vars(self):
         logger.info("get_pod_env_vars")
         env_vars = {
-            "S3_BUCKET_NAME": self._get_env_var("S3_BUCKET_ADDRESS"),
             "THEMATIC_SERVICE_NAME": self.thematic_service_name.upper(),
             "CATALOG_URL":  self.conf['pod_env_vars']['CATALOG_URL'],
             "REGISTRATION_URL":  self.conf['pod_env_vars']['REGISTRATION_URL'],
             "PROCESS_ID": self.conf["lenv"]["usid"],
             "THRESHOLD_FOR_TASKING": self.conf['pod_env_vars']['THRESHOLD_FOR_TASKING'],
             "THRESHOLD_FOR_UNRECOVERABLE_ERROR": self.conf['pod_env_vars']['THRESHOLD_FOR_UNRECOVERABLE_ERROR'],
-            "AWS_ACCESS_KEY_ID": self._get_env_var("AWS_ACCESS_KEY_ID"),
-            "AWS_SECRET_ACCESS_KEY": self._get_env_var("AWS_SECRET_ACCESS_KEY_ID"),
-            "AWS_DEFAULT_REGION": self.conf['pod_env_vars']['AWS_DEFAULT_REGION'],
-            "VAULT_ADDRESS": self.conf['pod_env_vars'].get("VAULT_ADDRESS"),
+            "VAULT_URL": self.conf['pod_env_vars'].get("VAULT_URL"),
             "VAULT_LOCAL_PATH": self.get_vault_path(),
             "AWS_ENDPOINT_URL": self.conf['pod_env_vars'].get("AWS_ENDPOINT_URL"),
+            "AWS_DEFAULT_REGION": self.conf['pod_env_vars']['AWS_DEFAULT_REGION'],
             "S3_BASE_URL_TEMPLATE": self.conf['pod_env_vars'].get("S3_BASE_URL_TEMPLATE"),
             "DATA_ACCESS_BASE_URL": self.conf['pod_env_vars'].get("DATA_ACCESS_BASE_URL"),
-            "KV_MOUNT": self.conf['pod_env_vars'].get("KV_MOUNT"),
         }
         return env_vars
 
@@ -336,9 +384,10 @@ class EoepcaCalrissianRunnerExecutionHandler(ExecutionHandler):
         name = cfg["name"]              # file name under /vault/secrets
         rel_path = cfg["path"]          # path relative to KV mount (e.g. "land/secret")
 
-        vault_address = self.conf['pod_env_vars'].get("VAULT_ADDRESS")
-        if not vault_address:
-            raise ValueError("No env var found named VAULT_ADDRESS")
+        vault_url = self.conf['pod_env_vars'].get("VAULT_URL")
+        if not vault_url:
+            raise ValueError("No env var found named VAULT_URL")
+
         kv_mount = self.conf['pod_env_vars'].get("KV_MOUNT")
         if not kv_mount:
             raise ValueError("No env var found named KV_MOUNT")
@@ -349,7 +398,7 @@ class EoepcaCalrissianRunnerExecutionHandler(ExecutionHandler):
         ann = {
             "vault.hashicorp.com/agent-inject": "true",
             "vault.hashicorp.com/role": role,
-            "vault.hashicorp.com/service": vault_address,
+            "vault.hashicorp.com/service": vault_url,
             "vault.hashicorp.com/agent-cpu-request": "50m",
             "vault.hashicorp.com/agent-memory-request": "32Mi",
             # secret mapping
@@ -470,7 +519,7 @@ def {{cookiecutter.workflow_id |replace("-", "_")  }}(conf, inputs, outputs): # 
         process_scope = "indexing"
         if "scope" in json_inputs and json_inputs["scope"] == "generic":
             process_scope = "generic"
-        finalized_cwl = cwl_helper.finalize_cwl(cwl, process_scope == "indexing")
+        finalized_cwl = cwl_helper.finalize_cwl(cwl, execution_handler, process_scope == "indexing")
 
         runner = ZooCalrissianRunner(
             cwl=finalized_cwl,
