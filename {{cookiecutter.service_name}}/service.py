@@ -63,6 +63,10 @@ class EoepcaCalrissianRunnerExecutionHandler(ExecutionHandler):
         self._set_process_scope_input()
         logger.info("Process scope: " + self.process_scope)
 
+        self.process_version = "0.0.0"
+        self._set_process_version_input()
+        logger.info("Process version: " + self.process_version)
+
         self.http_proxy_env = os.environ.get("HTTP_PROXY", None)
 
         self.dedicated_namespace = dedicated_namespace
@@ -83,6 +87,17 @@ class EoepcaCalrissianRunnerExecutionHandler(ExecutionHandler):
             logger.error("Setting  service template issue: " + str(e))
             logger.error(traceback.format_exc())
             raise(e)
+
+    def _set_process_version_input(self):
+        logger.info("Adding Process version")
+        try:
+            input_request = self.conf['request']['jrequest']
+            process_version = json.loads(input_request)['inputs']['process_version']
+            self.process_version = process_version
+        except Exception as e:
+            logger.error("Setting process version issue: " + str(e))
+            logger.error(traceback.format_exc())
+            raise (e)
 
     def _set_thematic_service_config(self):
         logger.info("Adding Thematic service configuration ")
@@ -331,6 +346,7 @@ class EoepcaCalrissianRunnerExecutionHandler(ExecutionHandler):
         logger.info("get_pod_env_vars")
         env_vars = {
             "THEMATIC_SERVICE_NAME": self.thematic_service_name.upper(),
+            "PROCESS_VERSION": self.process_version,
             "CATALOG_URL":  self.conf['pod_env_vars']['CATALOG_URL'],
             "REGISTRATION_URL":  self.conf['pod_env_vars']['REGISTRATION_URL'],
             "PROCESS_ID": self.conf["lenv"]["usid"],
