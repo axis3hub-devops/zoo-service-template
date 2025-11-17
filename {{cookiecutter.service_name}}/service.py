@@ -147,6 +147,7 @@ class EoepcaCalrissianRunnerExecutionHandler(ExecutionHandler):
             logger.info("processing_stageout_env_vars: "+ str(self.processing_stageout_env_vars))
             self.s3_bucket_name = self._get_env_var("S3_BUCKET_ADDRESS")
             self.processing_stageout_env_vars["S3_BUCKET_NAME"] = self.s3_bucket_name
+            self.processing_stageout_env_vars["AWS_ENDPOINT_URL"] = self.conf['pod_env_vars'].get("AWS_ENDPOINT_URL")
         except Exception as e:
             logger.error("Setting processing stageout config issue: " + str(e))
             logger.error(traceback.format_exc())
@@ -354,7 +355,6 @@ class EoepcaCalrissianRunnerExecutionHandler(ExecutionHandler):
             "THRESHOLD_FOR_UNRECOVERABLE_ERROR": self.conf['pod_env_vars']['THRESHOLD_FOR_UNRECOVERABLE_ERROR'],
             "VAULT_URL": self.conf['pod_env_vars'].get("VAULT_URL"),
             "VAULT_LOCAL_PATH": self.get_vault_path(),
-            "AWS_ENDPOINT_URL": self.conf['pod_env_vars'].get("AWS_ENDPOINT_URL"),
             "AWS_DEFAULT_REGION": self.conf['pod_env_vars']['AWS_DEFAULT_REGION'],
             "S3_BASE_URL_TEMPLATE": self.conf['pod_env_vars'].get("S3_BASE_URL_TEMPLATE"),
             "DATA_ACCESS_BASE_URL": self.conf['pod_env_vars'].get("DATA_ACCESS_BASE_URL"),
