@@ -60,12 +60,14 @@ class EoepcaCalrissianRunnerExecutionHandler(ExecutionHandler):
         logger.info("Thematic service name: " + self.thematic_service_name)
 
         self.process_scope = "indexing"
-        self._set_process_scope_input()
-        logger.info("Process scope: " + self.process_scope)
-
-        self.process_version = "0.0.0"
-        self._set_process_version_input()
-        logger.info("Process version: " + self.process_version)
+        self.process_version = None
+        self.process_frequency = None
+        self._set_process_infos_input()
+        logger.info(
+            f"Process infos: "
+            f"version='{self.process_version}, "
+            f"frequency='{self.process_frequency}', "
+            f"scope='{self.process_scope}'")
 
         self.http_proxy_env = os.environ.get("HTTP_PROXY", None)
 
@@ -88,12 +90,20 @@ class EoepcaCalrissianRunnerExecutionHandler(ExecutionHandler):
             logger.error(traceback.format_exc())
             raise(e)
 
-    def _set_process_version_input(self):
-        logger.info("Adding Process version")
+    def _set_process_infos_input(self):
+        logger.info("Adding Process infos")
         try:
             input_request = self.conf['request']['jrequest']
-            process_version = json.loads(input_request)['inputs']['process_version']
+            json_inputs = json.loads(input_request)['inputs']
+
+            process_version = json_inputs['process_version']
+            process_frequency = json_inputs['process_frequency']
             self.process_version = process_version
+            self.process_frequency = process_frequency
+
+            if "scope" in json_inputs:
+                process_scope = json_inputs['scope']
+                self.process_scope = process_scope
         except Exception as e:
             logger.error("Setting process version issue: " + str(e))
             logger.error(traceback.format_exc())
@@ -139,18 +149,6 @@ class EoepcaCalrissianRunnerExecutionHandler(ExecutionHandler):
             self.processing_stageout_env_vars["S3_BUCKET_NAME"] = self.s3_bucket_name
         except Exception as e:
             logger.error("Setting processing stageout config issue: " + str(e))
-            logger.error(traceback.format_exc())
-            raise(e)
-
-    def _set_process_scope_input(self):
-        logger.info("Adding Process scope")
-        try:
-            input_request = self.conf['request']['jrequest']
-            json_inputs = json.loads(input_request)['inputs']
-            if "scope" in json_inputs:
-                self.process_scope = json_inputs['scope']
-        except Exception as e:
-            logger.error("Setting process scope issue: " + str(e))
             logger.error(traceback.format_exc())
             raise(e)
 
@@ -347,6 +345,8 @@ class EoepcaCalrissianRunnerExecutionHandler(ExecutionHandler):
         env_vars = {
             "THEMATIC_SERVICE_NAME": self.thematic_service_name.upper(),
             "PROCESS_VERSION": self.process_version,
+            "PROCESS_FREQUENCY": self.process_frequency,
+            "PROCESS_SCOPE": self.process_scope,
             "CATALOG_URL":  self.conf['pod_env_vars']['CATALOG_URL'],
             "REGISTRATION_URL":  self.conf['pod_env_vars']['REGISTRATION_URL'],
             "PROCESS_ID": self.conf["lenv"]["usid"],
