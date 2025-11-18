@@ -20,8 +20,8 @@ def update_workflow_graph(workflow_graph, is_indexing: bool = True):
         workflow_graph["steps"]["s3_upload_interceptor"] = {
             "run": "#s3_upload_interceptor",
             "in": {"execution_results": "process/process_results",
-                   "process_results_interceptor_results_in": "process_results_interceptor/process_results_interceptor_results",
-                   },
+                    "process_results_interceptor_results_in": "process_results_interceptor/process_results_interceptor_results",
+                },
             "out": ["s3_upload_interceptor_results"],
         }
     workflow_graph["steps"]["process_results_interceptor"] = {
@@ -172,9 +172,11 @@ def finalize_cwl(cwl, execution_handler, is_indexing: bool = True):
     thematic_service_env_vars = execution_handler.thematic_service_env_vars
     processing_stageout_env_vars = execution_handler.processing_stageout_env_vars
     processing_stageout_image = execution_handler.processing_stageout_image
-    logger.info(f"Finalizing CWL with \nthematic env vars {thematic_service_env_vars}" \
-     f"\nStage out env vars {processing_stageout_env_vars}"
-     f"\nProcessing stage out vars {processing_stageout_image}")
+    logger.info(
+        f"Finalizing CWL with \nthematic env vars {thematic_service_env_vars}" \
+        f"\nStage out env vars {processing_stageout_env_vars}"
+        f"\nProcessing stage out vars {processing_stageout_image}"
+    )
     graphs = cwl["$graph"]
     for graph in graphs:
         if graph["class"] == "Workflow":

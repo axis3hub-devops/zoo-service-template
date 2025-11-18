@@ -1,8 +1,10 @@
 # see https://zoo-project.github.io/workshops/2014/first_service.html#f1
 import pathlib
 import sys
+import re
 from typing import Dict
 from pathlib import Path
+
 import boto3
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -96,10 +98,8 @@ class EoepcaCalrissianRunnerExecutionHandler(ExecutionHandler):
             input_request = self.conf['request']['jrequest']
             json_inputs = json.loads(input_request)['inputs']
 
-            process_version = json_inputs['process_version']
-            process_frequency = json_inputs['process_frequency']
-            self.process_version = process_version
-            self.process_frequency = process_frequency
+            self.process_version = json_inputs['process_version']
+            self.process_frequency = json_inputs['process_frequency']
 
             if "scope" in json_inputs:
                 process_scope = json_inputs['scope']
@@ -145,9 +145,9 @@ class EoepcaCalrissianRunnerExecutionHandler(ExecutionHandler):
                 self.vault_url
             )
             logger.info("processing_stageout_env_vars: "+ str(self.processing_stageout_env_vars))
-            self.s3_bucket_name = self._get_env_var("S3_BUCKET_ADDRESS")
+            self.s3_bucket_name = self._get_env_var("S3_BUCKET_NAME")
             self.processing_stageout_env_vars["S3_BUCKET_NAME"] = self.s3_bucket_name
-            self.processing_stageout_env_vars["AWS_ENDPOINT_URL"] = self.conf['pod_env_vars'].get("AWS_ENDPOINT_URL")
+            self.processing_stageout_env_vars["S3_ENDPOINT_URL"] = self.conf['pod_env_vars'].get("S3_ENDPOINT_URL")
         except Exception as e:
             logger.error("Setting processing stageout config issue: " + str(e))
             logger.error(traceback.format_exc())
@@ -258,7 +258,7 @@ class EoepcaCalrissianRunnerExecutionHandler(ExecutionHandler):
             self.unset_http_proxy_env()
 
             # Resolve S3 bucket
-            bucket = self._get_env_var("S3_BUCKET_ADDRESS")
+            bucket = self._get_env_var("S3_BUCKET_NAME")
             process_id = self.conf["lenv"]["usid"]
 
 
@@ -354,10 +354,13 @@ class EoepcaCalrissianRunnerExecutionHandler(ExecutionHandler):
             "THRESHOLD_FOR_TASKING": self.conf['pod_env_vars']['THRESHOLD_FOR_TASKING'],
             "THRESHOLD_FOR_UNRECOVERABLE_ERROR": self.conf['pod_env_vars']['THRESHOLD_FOR_UNRECOVERABLE_ERROR'],
             "VAULT_URL": self.conf['pod_env_vars'].get("VAULT_URL"),
-            "VAULT_LOCAL_PATH": self.get_vault_path(),
             "AWS_DEFAULT_REGION": self.conf['pod_env_vars']['AWS_DEFAULT_REGION'],
             "S3_BASE_URL_TEMPLATE": self.conf['pod_env_vars'].get("S3_BASE_URL_TEMPLATE"),
             "DATA_ACCESS_BASE_URL": self.conf['pod_env_vars'].get("DATA_ACCESS_BASE_URL"),
+            "AUTH_CATALOG_URL": self.conf['pod_env_vars'].get("AUTH_CATALOG_URL"),
+            "GEOSERVER_URL": self.conf['pod_env_vars'].get("GEOSERVER_URL"),
+            "KEYCLOAK_URL": self.conf['pod_env_vars'].get("KEYCLOAK_URL"),
+            "S3_ENDPOINT_URL": self.conf['pod_env_vars'].get("S3_ENDPOINT_URL"),
         }
         return env_vars
 
@@ -368,15 +371,6 @@ class EoepcaCalrissianRunnerExecutionHandler(ExecutionHandler):
         
         return {}
 
-    def get_vault_path(self):
-        if self.vault_injector:
-            svc = self.thematic_service_name.lower()
-            if svc not in THEMATIC_SERVICES_VAULT_MAPPING:
-                raise ValueError(f"No vault pod annotations found named {svc}")
-            cfg = THEMATIC_SERVICES_VAULT_MAPPING[svc]
-            name = cfg["name"]
-            return "/vault/secrets/" + name
-        return ""
 
     def get_pod_annotations(self) -> dict:
         """
@@ -570,6 +564,15 @@ def {{cookiecutter.workflow_id |replace("-", "_")  }}(conf, inputs, outputs): # 
             return zoo.SERVICE_SUCCEEDED
         else:
             msg = runner.get_termination_reason()
+            if msg["error_msg"] and "requested access to the resource is denied" in msg["error_msg"]:
+                # Extract the image name from the error message
+                match = re.search(r"Image pull failed=([^;]+)", msg["error_msg"])
+                image_name = match.group(1) if match else "unknown image"
+
+                # Replace the error message with the custom one including the image name
+                msg["error_msg"] = f"Docker image '{image_name}' cannot be accessed with axis3hub-devops user, please check the URL and the user permissions."
+            elif msg["error_msg"] and "Pod unschedulable" in msg["error_msg"]:
+                msg["error_msg"] = f"The requested resources were not available at the moment. Please reschedule your process again."
             conf["lenv"]["message"] = json.dumps(msg)
             logger.error(f"Execution failed: {msg}")
             return zoo.SERVICE_FAILED
