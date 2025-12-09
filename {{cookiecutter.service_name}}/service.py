@@ -304,7 +304,11 @@ class EoepcaCalrissianRunnerExecutionHandler(ExecutionHandler):
             "S3_BASE_URL_TEMPLATE": self.conf['pod_env_vars'].get("S3_BASE_URL_TEMPLATE"),
             "DATA_ACCESS_BASE_URL": self.conf['pod_env_vars'].get("DATA_ACCESS_BASE_URL"),
             "KV_MOUNT": self.conf['pod_env_vars'].get("KV_MOUNT"),
+            "KEYCLOAK_URL": self.conf['pod_env_vars'].get("KEYCLOAK_URL"),
+            "GEOSERVER_URL": self.conf['pod_env_vars'].get("GEOSERVER_URL"),
+            "S3_ENDPOINT_URL": self.conf['pod_env_vars'].get("S3_ENDPOINT_URL"),
         }
+
         return env_vars
 
     def get_pod_node_selector(self):
