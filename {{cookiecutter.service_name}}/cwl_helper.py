@@ -170,7 +170,7 @@ def add_s3_upload_interceptor_graph(processing_stageout_image):
             },
             "ResourceRequirement": {
                 "coresMax": 1,
-                "ramMax": 1024,
+                "ramMax": 10024,
             },
             "InlineJavascriptRequirement": {},
             "InitialWorkDirRequirement": {
