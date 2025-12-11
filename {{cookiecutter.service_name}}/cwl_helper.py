@@ -235,11 +235,11 @@ def finalize_cwl(cwl, execution_handler=None, is_indexing: bool = True):
         )
     pretty = json.dumps(cwl, indent=4)
 
-    logger.info("---Finalized CWL --- Start")
+    # logger.info("---Finalized CWL --- Start")
 
-    for line in pretty.splitlines():
-        logger.info(line)
-    logger.info("---Finalized CWL --- Start")
+    # for line in pretty.splitlines():
+    #     logger.info(line)
+    # logger.info("---Finalized CWL --- Start")
 
     return cwl
 
@@ -369,6 +369,8 @@ def add_cwl_env_vars(cwl: Dict[str, Any],
         tool_id = node.get("id", "")
         _ensure_requirements_dict_or_list(node)
         env_def = _get_envvar_requirement(node)
+        logger.info(f"node  {str(tool_id)}")
+        logger.info(f"env_def {str(env_def)}")
 
         # Always add processing-stage env vars
         if tool_id in _SKIP_IDS:
@@ -377,7 +379,7 @@ def add_cwl_env_vars(cwl: Dict[str, Any],
         # Add thematic-service env vars unless this tool is skipped
         if tool_id not in _SKIP_IDS:
             _merge_env(env_def, thematic_service_env_vars, overwrite=True)
-
-    logger.info(f"finalized cwl {str(cwl)}")
+        logger.info(f"imerged env_def {str(env_def)}")
+    #logger.info(f"finalized cwl {str(cwl)}")
 
     return cwl
