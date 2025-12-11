@@ -275,50 +275,48 @@ def _ensure_requirements_dict_or_list(node: Dict[str, Any]) -> None:
     if "requirements" not in node or node["requirements"] is None:
         node["requirements"] = {}
 
-def _get_envvar_requirement(node: Dict[str, Any]) -> List[Dict[str, str]]:
+def _get_envvar_requirement(node: Dict[str, Any]) -> Dict[str, Any]:
     """
-    Return a reference to the EnvVarRequirement envDef list, creating it if needed.
-    Supports CWL where 'requirements' may be a dict or a list of requirement objects.
+    Always normalize to:
+    
+    requirements:
+      EnvVarRequirement:
+        envDef: { ... }
+
+    No validation — overwrite anything that is not a dict.
     """
     reqs = node.get("requirements")
 
-    # If requirements is a list
-    if isinstance(reqs, list):
-        evr = None
-        for r in reqs:
-            if isinstance(r, dict) and r.get("class") == "EnvVarRequirement":
-                evr = r
-                break
-        if evr is None:
-            evr = {"class": "EnvVarRequirement", "envDef": []}
-            reqs.append(evr)
-        if "envDef" not in evr or evr["envDef"] is None:
-            evr["envDef"] = []
-        return evr["envDef"]
+    # If requirements is missing or not a dict → replace with empty dict.
+    if not isinstance(reqs, dict):
+        reqs = {}
+        node["requirements"] = reqs
 
-    # Else treat as dict (most common in your snippets)
-    if "EnvVarRequirement" not in reqs or reqs["EnvVarRequirement"] is None:
-        reqs["EnvVarRequirement"] = {"envDef": []}
-    elif "envDef" not in reqs["EnvVarRequirement"] or reqs["EnvVarRequirement"]["envDef"] is None:
-        reqs["EnvVarRequirement"]["envDef"] = []
-    return reqs["EnvVarRequirement"]["envDef"]
+    evr = reqs.get("EnvVarRequirement")
 
-def _merge_env(env_def: List[Dict[str, str]], new_vars: Dict[str, Any], overwrite: bool = False) -> None:
-    """
-    Merge key/value pairs from new_vars into envDef.
-    If overwrite=False (default), keep existing values.
-    """
-    existing = {e.get("envName"): e for e in env_def if isinstance(e, dict) and "envName" in e}
-    for k, v in (new_vars or {}).items():
-        if k in existing and not overwrite:
-            continue
-        entry = {"envName": str(k), "envValue": str(v)}
-        if k in existing:
-            # replace in place to preserve order
-            idx = env_def.index(existing[k])
-            env_def[idx] = entry
-        else:
-            env_def.append(entry)
+    # If missing or not a dict → replace with {"envDef": {}}
+    if not isinstance(evr, dict):
+        evr = {"envDef": {}}
+        reqs["EnvVarRequirement"] = evr
+
+    env_def = evr.get("envDef")
+
+    # If missing or not a dict → replace with empty dict
+    if not isinstance(env_def, dict):
+        env_def = {}
+        evr["envDef"] = env_def
+
+    return env_def
+
+def _merge_env(env_def: Dict[str, Any],
+               new_vars: Dict[str, Any],
+               overwrite: bool = False) -> None:
+    """Merge dict-style env vars into dict-style env_def."""
+    if not new_vars:
+        return
+    for k, v in new_vars.items():
+        if overwrite or k not in env_def:
+            env_def[str(k)] = str(v)
 
 def add_cwl_env_vars(cwl: Dict[str, Any],
                      thematic_service_env_vars: Dict[str, Any],
@@ -347,7 +345,7 @@ def add_cwl_env_vars(cwl: Dict[str, Any],
 
         # Add thematic-service env vars unless this tool is skipped
         if tool_id not in _SKIP_IDS:
-            _merge_env(env_def, thematic_service_env_vars, overwrite=False)
+            _merge_env(env_def, thematic_service_env_vars, overwrite=True)
 
     logger.info(f"finalized cwl {str(cwl)}")
 
