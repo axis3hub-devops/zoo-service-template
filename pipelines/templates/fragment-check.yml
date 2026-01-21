@@ -1,0 +1,11 @@
+jobs:
+    - job: FragmentCheck
+      displayName: "Fragment Check in PR"
+      steps:
+          - checkout: self
+            persistCredentials: true
+
+          - script: |
+                chmod +x ./scripts/fragment-check.sh
+                bash ./scripts/fragment-check.sh
+            displayName: "Run Fragment Checks"
