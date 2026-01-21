@@ -1,0 +1,82 @@
+jobs:
+    - job: UnitTests
+      displayName: "Tests and Sonar Analysis"
+      dependsOn: CheckSyntax
+      condition: succeeded()
+
+      steps:
+          - script: |
+                wget -qO- https://astral.sh/uv/install.sh | sh
+            displayName: "Install UV"
+
+          - script: |
+                source $HOME/.local/bin/env
+                uv sync
+                source .venv/bin/activate
+                mkdir -p report
+                uv run pytest -m "not e2e" --cov=. --cov-report=xml --cov-report=html --junitxml=report/test-results.xml
+            displayName: "Run tests"
+
+          # === Branch-based coverage fix logic ===
+          - task: Bash@3
+            displayName: "Normalize coverage paths"
+            inputs:
+                targetType: "inline"
+                script: |
+                    coverageFile="$(System.DefaultWorkingDirectory)/coverage.xml"
+
+                    echo "=== Starting coverage normalization for $(Build.SourceBranchName) ==="
+
+                    if [ ! -f "$coverageFile" ]; then
+                      echo "Coverage file not found!"
+                      exit 1
+                    fi
+
+                    if [ "$(Build.SourceBranchName)" = "main" ]; then
+                      echo "Main branch detected — applying QA-style normalization"
+                      sed -i 's|<source>/azp/_work/30/s/</source>|<source>/azp/_work/30/s</source>|g' "$coverageFile"
+                      sed -i 's|filename="|filename="/|g' "$coverageFile"
+                    else
+                      echo "Feature branch detected — applying generic normalization"
+                      sed -i "s|$(System.DefaultWorkingDirectory)|.|g" "$coverageFile"
+                    fi
+
+                    echo "=== Coverage normalization complete ==="
+
+          - task: PublishTestResults@2
+            displayName: "Publish Test Results"
+            inputs:
+                testResultsFormat: "JUnit"
+                testResultsFiles: "$(System.DefaultWorkingDirectory)/report/test-results.xml"
+                failTaskOnFailedTests: true
+
+          - task: PublishCodeCoverageResults@1
+            displayName: "Publish Code Coverage"
+            inputs:
+                codeCoverageTool: "Cobertura"
+                summaryFileLocation: "$(System.DefaultWorkingDirectory)/coverage.xml"
+                pathToSources: "$(System.DefaultWorkingDirectory)"
+
+          - task: SonarQubePrepare@7
+            displayName: "SonarQube Prepare"
+            inputs:
+                SonarQube: "sonarqube-pk-hellas"
+                scannerMode: "cli"
+                configMode: "manual"
+                cliProjectKey: "P24E2841_AXIS_3_Governmental_Hub_zoo_service_template_7a689edd-c37b-4ede-800a-b01e42df6c92"
+                cliSources: "."
+                extraProperties: |
+                    sonar.sources=.
+                    sonar.coverage.exclusions=tests/**
+                    sonar.python.coverage.reportPaths=$(System.DefaultWorkingDirectory)/coverage.xml
+
+          - task: SonarQubeAnalyze@7
+            displayName: "SonarQube Analyze"
+            inputs:
+                jdkversion: "JAVA_HOME_17_X64"
+
+          - task: SonarQubePublish@7
+            displayName: "SonarQube Publish"
+            inputs:
+                pollingTimeoutSec: "300"
+            continueOnError: true

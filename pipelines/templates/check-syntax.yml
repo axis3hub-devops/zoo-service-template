@@ -1,0 +1,24 @@
+parameters:
+    dependsOnFragmentCheck: false
+
+jobs:
+    - job: CheckSyntax
+      displayName: "Check syntax"
+      ${{ if eq(parameters.dependsOnFragmentCheck, true) }}:
+          dependsOn: FragmentCheck
+      condition: succeeded()
+      steps:
+          - script: |
+                wget -qO- https://astral.sh/uv/install.sh | sh
+            displayName: "Install UV"
+
+          - script: |
+              source $HOME/.local/bin/env
+              uv sync
+              uv run ruff check
+            displayName: "Ruff Check"
+
+          - script: |
+              source $HOME/.local/bin/env
+              uv run pydocstyle
+            displayName: "Pydoc Style check"

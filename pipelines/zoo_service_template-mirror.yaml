@@ -1,0 +1,62 @@
+name: ZOO_Service_Template_Mirror_Pipeline
+
+trigger:
+    tags:
+      include:
+        - '*'
+
+resources:
+    - repo: self
+
+variables:
+    - group: Github-devops
+
+stages:
+    - stage: PushToGitHub
+      displayName: Push changes from Azure DevOps to GitHub
+      jobs:
+          - job: SyncPush
+            displayName: Sync & Push Changes
+            pool:
+                name: Axis3
+            steps:
+                - checkout: self
+                  persistCredentials: true
+                  enabled: true
+
+                - script: |
+                      set -e  # Exit on error unless otherwise specified
+
+                      echo "Configuring Git user..."
+                      git config user.name "mieron"
+                      git config user.email "ieronymaki@planetek.gr"
+
+                      echo "Checking current remotes..."
+                      git remote -v
+
+                      echo "Setting GitHub remote with PAT..."
+                      git remote remove github 2>/dev/null || true
+                      git remote add github https://x-access-token:${GITHUB_TOKEN}@github.com/HellenicSpaceCenter/axis3-hub-zoo-service-template
+
+
+                      echo "Setting Git credentials cache..."
+                      git config credential.helper cache
+
+                      echo "Fetching latest changes..."
+                      git fetch origin
+                      git fetch github
+
+                      echo "Ensuring we are on the main branch..."
+                      git checkout main
+
+                      echo "Pulling latest from Azure DevOps origin..."
+                      git pull origin main --ff-only || echo "No changes from Azure DevOps."
+
+                      echo "Merging GitHub main into Azure DevOps main..."
+                      git merge github/main || echo "Merge conflicts may exist, but continuing anyway..."
+
+                      echo "Pushing merged changes to GitHub..."
+                      git push --force github main
+                  displayName: "Pull from Azure DevOps & Push to GitHub"
+                  env:
+                      GITHUB_TOKEN: $(GITHUB_TOKEN) # Securely passed GitHub token
