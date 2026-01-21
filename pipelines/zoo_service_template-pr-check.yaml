@@ -1,0 +1,28 @@
+name: ZOO-Service-Template-PR-Check Pipeline 
+
+trigger: none
+
+pool:
+    name: Axis3
+
+variables:
+    - group: Github-devops
+    - group: AWS-Service-User
+    - name: APP_NAME
+      value: "zoo_service_template"
+    - name: IMAGE_REPO
+      value: "ghcr.io/hellenicspacecenter/axis3-hub-$(APP_NAME)"
+    - name: IMAGE_TAG
+      value: dev-$(Build.BuildId)
+
+stages:
+    - stage: Test
+      displayName: "Run Tests"
+      jobs:
+          - template: templates/fragment-check.yml
+          - template: templates/check-syntax.yml
+            parameters:
+                dependsOnFragmentCheck: true
+          - template: templates/unit-test.yml
+
+   
