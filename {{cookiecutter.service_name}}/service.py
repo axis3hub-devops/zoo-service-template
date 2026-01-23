@@ -556,7 +556,7 @@ def {{cookiecutter.workflow_id |replace("-", "_")  }}(conf, inputs, outputs): # 
         if "scope" in json_inputs and json_inputs["scope"] == "generic":
             process_scope = "generic"
         finalized_cwl = cwl_helper.finalize_cwl(cwl, execution_handler, process_scope == "indexing")
-
+        os.environ.set("STORAGE_CLASS", "longhorn-db")
         runner = ZooCalrissianRunner(
             cwl=finalized_cwl,
             conf=conf,
