@@ -262,11 +262,14 @@ def get_vault_secret_values(
     base = vault_url.rstrip("/")
     login_url = f"{base}/v1/auth/userpass/login/{user}"
     secret_url = f"{base}/v1/{thematic_service_vault_path}"
-
     try:
         with requests.Session() as s:
+            if not verify_tls:
+                s.trust_env = False 
+                s.proxies = {"http": None, "https": None}
             # Login
             resp = s.post(login_url, json={"password": password}, timeout=timeout, verify=verify_tls)
+
             if resp.status_code != 200:
                 logger.error(f"Vault login failed ({resp.status_code}): {resp.text}")
                 return {}

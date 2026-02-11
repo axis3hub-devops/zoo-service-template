@@ -86,8 +86,22 @@ class EoepcaCalrissianRunnerExecutionHandler(ExecutionHandler):
             self.vault_user = self.conf['pod_env_vars']["VAULT_USER"]
             self.vault_password = self.conf['pod_env_vars']["VAULT_PASSWORD"]
             self.vault_url = self.conf['pod_env_vars']["VAULT_URL"]
+<<<<<<< HEAD
             self.aws_access_key_id = self.conf['pod_env_vars']["AWS_ACCESS_KEY_ID"]
             self.aws_secret_access_key = self.conf['pod_env_vars']["AWS_SECRET_ACCESS_KEY"]
+=======
+            self.aws_access_key_id  = self.conf['pod_env_vars']["AWS_ACCESS_KEY_ID"]
+            self.aws_secret_access_key =  self.conf['pod_env_vars']["AWS_SECRET_ACCESS_KEY"]
+
+            self.idhe = self.conf.get("pod_env_vars", {}).get("IDHE")
+            if self.idhe is not None:
+                logger.info("Running in IDHE")
+                self.verify_tls = False
+            else:
+                logger.info("Running in AWS")
+                self.verify_tls = True
+
+>>>>>>> c3fc77a (Add support for verify tls)
         except Exception as e:
             logger.error("Setting  service template issue: " + str(e))
             logger.error(traceback.format_exc())
@@ -119,11 +133,13 @@ class EoepcaCalrissianRunnerExecutionHandler(ExecutionHandler):
             self.thematic_service_name = service_name
             self.thematic_service_env_vars = {}
             self.thematic_service_vault_path = self._get_env_var("VAULT_PATH")
+
             self.thematic_service_env_vars = cwl_helper.get_vault_secret_values(
                 self.thematic_service_vault_path,
                 self.vault_user,
                 self.vault_password,
-                self.vault_url
+                self.vault_url,
+                verify_tls=self.verify_tls
             )
             self.thematic_service_env_vars["VAULT_PATH"] = self.thematic_service_vault_path 
             self.thematic_service_env_vars["VAULT_URL"] = self.vault_url
@@ -143,7 +159,8 @@ class EoepcaCalrissianRunnerExecutionHandler(ExecutionHandler):
                 self.processing_stageout_vault_path,
                 self.vault_user,
                 self.vault_password,
-                self.vault_url
+                self.vault_url,
+                verify_tls=self.verify_tls
             )
             logger.info("processing_stageout_env_vars: "+ str(self.processing_stageout_env_vars))
             self.s3_bucket_name = self._get_env_var("S3_BUCKET_NAME")
@@ -556,7 +573,7 @@ def {{cookiecutter.workflow_id |replace("-", "_")  }}(conf, inputs, outputs): # 
         if "scope" in json_inputs and json_inputs["scope"] == "generic":
             process_scope = "generic"
         finalized_cwl = cwl_helper.finalize_cwl(cwl, execution_handler, process_scope == "indexing")
-        os.environ.set("STORAGE_CLASS", "longhorn-db")
+
         runner = ZooCalrissianRunner(
             cwl=finalized_cwl,
             conf=conf,
