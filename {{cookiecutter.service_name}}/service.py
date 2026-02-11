@@ -198,7 +198,7 @@ class EoepcaCalrissianRunnerExecutionHandler(ExecutionHandler):
         Files are uploaded to s3://<bucket>/<process_id>/<filename>.
         """
         region_name = self.conf['pod_env_vars'].get("AWS_DEFAULT_REGION")
-        endpoint_url = self.conf['pod_env_vars'].get("AWS_ENDPOINT_URL")
+        endpoint_url = self.conf['pod_env_vars'].get("S3_ENDPOINT_URL")
         logger.info(f"pod_env_vars {str(self.conf['pod_env_vars'])}")
         try:
             logger.info(
