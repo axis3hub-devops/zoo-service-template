@@ -1,62 +1,90 @@
-name: ZOO_Service_Template_Mirror_Pipeline
-
 trigger:
-    tags:
-      include:
-        - '*'
+  branches:
+    include:
+      - develop
+      - main
+  tags:
+    include:
+      - '*'
 
-resources:
-    - repo: self
+pool:
+  name: Axis3
 
 variables:
-    - group: Github-devops
+- group: Github-devops
 
 stages:
-    - stage: PushToGitHub
-      displayName: Push changes from Azure DevOps to GitHub
-      jobs:
-          - job: SyncPush
-            displayName: Sync & Push Changes
-            pool:
-                name: Axis3
-            steps:
-                - checkout: self
-                  persistCredentials: true
-                  enabled: true
+  - stage: PushToGitHub
+    displayName: Mirror Azure DevOps → GitHub
+    jobs:
+      - job: SyncPush
+        displayName: Sync & Push Repository
+        steps:
 
-                - script: |
-                      set -e  # Exit on error unless otherwise specified
+          - checkout: self
+            persistCredentials: true
+            fetchDepth: 0
 
-                      echo "Configuring Git user..."
-                      git config user.name "mieron"
-                      git config user.email "ieronymaki@planetek.gr"
+          - script: |
+              set -e
 
-                      echo "Checking current remotes..."
-                      git remote -v
+              echo "Configuring Git user..."
+              git config user.name "mieron"
+              git config user.email "ieronymaki@planetek.gr"
 
-                      echo "Setting GitHub remote with PAT..."
-                      git remote remove github 2>/dev/null || true
-                      git remote add github https://x-access-token:${GITHUB_TOKEN}@github.com/HellenicSpaceCenter/axis3-hub-zoo-service-template
+              echo "Disabling interactive git prompts..."
+              git config --global credential.helper ""
+              git config --global core.askPass ""
 
+              echo "Setting GitHub remote..."
+              git remote remove github 2>/dev/null || true
+              git remote add github https://x-access-token:${GITHUB_TOKEN}@github.com/HellenicSpaceCenter/axis3-hub-zoo-service-template
 
-                      echo "Setting Git credentials cache..."
-                      git config credential.helper cache
+              SOURCE_REF="${BUILD_SOURCEBRANCH}"
 
-                      echo "Fetching latest changes..."
-                      git fetch origin
-                      git fetch github
+              echo "Detected ref: $SOURCE_REF"
 
-                      echo "Ensuring we are on the main branch..."
-                      git checkout main
+              ########################################
+              # Branch mirroring
+              ########################################
+              if [[ "$SOURCE_REF" == refs/heads/* ]]; then
 
-                      echo "Pulling latest from Azure DevOps origin..."
-                      git pull origin main --ff-only || echo "No changes from Azure DevOps."
+                BRANCH="${SOURCE_REF#refs/heads/}"
+                echo "Processing branch: $BRANCH"
 
-                      echo "Merging GitHub main into Azure DevOps main..."
-                      git merge github/main || echo "Merge conflicts may exist, but continuing anyway..."
+                git fetch origin
+                git checkout "$BRANCH"
 
-                      echo "Pushing merged changes to GitHub..."
-                      git push --force github main
-                  displayName: "Pull from Azure DevOps & Push to GitHub"
-                  env:
-                      GITHUB_TOKEN: $(GITHUB_TOKEN) # Securely passed GitHub token
+                echo "Pulling latest Azure DevOps changes..."
+                git pull origin "$BRANCH" --ff-only || true
+
+                echo "Checking GitHub branch existence..."
+                if git ls-remote --heads github "$BRANCH" | grep -q "$BRANCH"; then
+                  git pull github "$BRANCH" --ff-only || true
+                fi
+
+                echo "Pushing branch to GitHub..."
+                git push github "$BRANCH"
+
+              ########################################
+              # Tag mirroring
+              ########################################
+              elif [[ "$SOURCE_REF" == refs/tags/* ]]; then
+
+                TAG="${SOURCE_REF#refs/tags/}"
+                echo "Processing tag: $TAG"
+
+                git fetch origin --tags
+
+                echo "Pushing tag to GitHub..."
+                git push github "refs/tags/$TAG"
+
+              else
+                echo "Unknown ref type. Skipping mirroring."
+              fi
+
+              echo "Mirror complete."
+
+            displayName: Mirror Repository
+            env:
+              GITHUB_TOKEN: $(GITHUB_TOKEN)
