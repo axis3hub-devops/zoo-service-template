@@ -20,3 +20,25 @@ dev = [
 [pytest]
 [tool.pytest.ini_options]
 testpaths=["tests"]
+
+[tool.ruff.lint]
+select = ["E", "F"]
+extend-select = ["I"]
+
+[tool.towncrier]
+package = "src"
+directory = "newsfragments"
+filename = "CHANGELOG.md"
+
+[tool.towncrier.fragment.feature]
+[tool.towncrier.fragment.fix]
+[tool.towncrier.fragment.removal]
+
+[tool.towncrier.fragment.misc]
+name = "Misc"
+showcontent = true
+
+[tool.towncrier.fragment.doc]
+
+[tool.pydocstyle]
+match_dir = "^(?!(.venv|tests|e2e|migration)).*"
