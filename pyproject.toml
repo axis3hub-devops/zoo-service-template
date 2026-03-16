@@ -8,6 +8,9 @@ requires-python = ">=3.13"
 dependencies = [
     "boto3>=1.38.32",
     "cwltool>=3.1.20250110105449",
+    "urllib3==2.6.3",
+    "ruff",
+    "pydocstyle"
 ]
 
 [dependency-groups]
