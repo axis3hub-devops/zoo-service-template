@@ -8,6 +8,18 @@ from loguru import logger
 
 _SKIP_IDS = {"data_analysis_results_interceptor", "process_results_interceptor", "s3_upload_interceptor"}
 
+
+def _get_default_processing_image(cwl: Dict[str, Any]) -> str:
+    """Return a fallback Docker image from the existing CWL graph."""
+    for graph in cwl.get("$graph", []):
+        if not isinstance(graph, dict):
+            continue
+        docker_requirement = graph.get("hints", {}).get("DockerRequirement", {})
+        docker_pull = docker_requirement.get("dockerPull")
+        if docker_pull:
+            return docker_pull
+    return ""
+
 def update_workflow_graph(workflow_graph, is_indexing: bool = True):
     """Update the workflow graph with interceptor steps."""
     if is_indexing:
@@ -173,11 +185,23 @@ def add_s3_upload_interceptor_graph(processing_stageout_image):
     }
 
 
-def finalize_cwl(cwl, execution_handler, is_indexing: bool = True):
+def finalize_cwl(cwl, execution_handler=None, is_indexing: bool = True):
     """Finalize the CWL graph for execution."""
-    thematic_service_env_vars = execution_handler.thematic_service_env_vars
-    processing_stageout_env_vars = execution_handler.processing_stageout_env_vars
-    processing_stageout_image = execution_handler.processing_stageout_image
+    thematic_service_env_vars = {}
+    processing_stageout_env_vars = {}
+    processing_stageout_image = _get_default_processing_image(cwl)
+    if execution_handler is not None:
+        thematic_service_env_vars = getattr(
+            execution_handler, "thematic_service_env_vars", {}
+        )
+        processing_stageout_env_vars = getattr(
+            execution_handler, "processing_stageout_env_vars", {}
+        )
+        processing_stageout_image = getattr(
+            execution_handler,
+            "processing_stageout_image",
+            processing_stageout_image,
+        )
     logger.info(
         f"Finalizing CWL with \nthematic env vars {thematic_service_env_vars}" \
         f"\nStage out env vars {processing_stageout_env_vars}"
