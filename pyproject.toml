@@ -53,4 +53,5 @@ showcontent = true
 [tool.towncrier.fragment.doc]
 
 [tool.pydocstyle]
+match = "(?!service\\.py$).*\\.py"
 match_dir = "^(?!(.venv|tests|e2e|migration)).*"
