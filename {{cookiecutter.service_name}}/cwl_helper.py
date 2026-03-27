@@ -1,13 +1,27 @@
-import requests
+"""Helpers for finalizing CWL graphs and injecting environment variables."""
+
 import json
+from typing import Any, Dict, List
 
+import requests
 from loguru import logger
-from typing import Dict, Any, List
-
 
 _SKIP_IDS = {"data_analysis_results_interceptor", "process_results_interceptor", "s3_upload_interceptor"}
 
+
+def _get_default_processing_image(cwl: Dict[str, Any]) -> str:
+    """Return a fallback Docker image from the existing CWL graph."""
+    for graph in cwl.get("$graph", []):
+        if not isinstance(graph, dict):
+            continue
+        docker_requirement = graph.get("hints", {}).get("DockerRequirement", {})
+        docker_pull = docker_requirement.get("dockerPull")
+        if docker_pull:
+            return docker_pull
+    return ""
+
 def update_workflow_graph(workflow_graph, is_indexing: bool = True):
+    """Update the workflow graph with interceptor steps."""
     if is_indexing:
         # Add data analysis interceptor
         workflow_graph["steps"]["data_analysis_results_interceptor"] = {
@@ -32,12 +46,14 @@ def update_workflow_graph(workflow_graph, is_indexing: bool = True):
     return workflow_graph
 
 def update_process_graph(process_graph):
+    """Add interceptor input wiring to the process graph."""
     process_graph["inputs"]["data_analysis_results_interceptor_results"] = {
             "type": "Directory",
         }
     return process_graph
 
 def add_data_analysis_results_interceptor_graph(processing_stageout_image):
+    """Build the data analysis results interceptor tool graph."""
     return {
         "class": "CommandLineTool",
         "id": "data_analysis_results_interceptor",
@@ -76,6 +92,7 @@ def add_data_analysis_results_interceptor_graph(processing_stageout_image):
     }
 
 def add_process_results_interceptor_graph(processing_stageout_image):
+    """Build the process results interceptor tool graph."""
     return {
         "class": "CommandLineTool",
         "id": "process_results_interceptor",
@@ -114,8 +131,8 @@ def add_process_results_interceptor_graph(processing_stageout_image):
     }
 
 def add_s3_upload_interceptor_graph(processing_stageout_image):
-    """
-    CommandLineTool for the S3 upload interceptor (renamed from 'stage-out').
+    """Build the S3 upload interceptor tool graph.
+
     Exposes a 'wf_outputs' Directory input so the workflow can wire
     process_results_interceptor's Directory output into it.
     """
@@ -168,10 +185,23 @@ def add_s3_upload_interceptor_graph(processing_stageout_image):
     }
 
 
-def finalize_cwl(cwl, execution_handler, is_indexing: bool = True):
-    thematic_service_env_vars = execution_handler.thematic_service_env_vars
-    processing_stageout_env_vars = execution_handler.processing_stageout_env_vars
-    processing_stageout_image = execution_handler.processing_stageout_image
+def finalize_cwl(cwl, execution_handler=None, is_indexing: bool = True):
+    """Finalize the CWL graph for execution."""
+    thematic_service_env_vars = {}
+    processing_stageout_env_vars = {}
+    processing_stageout_image = _get_default_processing_image(cwl)
+    if execution_handler is not None:
+        thematic_service_env_vars = getattr(
+            execution_handler, "thematic_service_env_vars", {}
+        )
+        processing_stageout_env_vars = getattr(
+            execution_handler, "processing_stageout_env_vars", {}
+        )
+        processing_stageout_image = getattr(
+            execution_handler,
+            "processing_stageout_image",
+            processing_stageout_image,
+        )
     logger.info(
         f"Finalizing CWL with \nthematic env vars {thematic_service_env_vars}" \
         f"\nStage out env vars {processing_stageout_env_vars}"
@@ -222,8 +252,8 @@ def get_vault_secret_values(
     timeout: float = 10.0,
     verify_tls: bool = True,
 ) -> dict:
-    """
-    Authenticate to Vault via userpass and return ONLY the 'data.data' dict
+    """Authenticate to Vault via userpass and return the secret payload.
+
     for the secret mapped to `thematic_service`.
 
     Returns:
@@ -255,7 +285,7 @@ def get_vault_secret_values(
 
             payload = resp.json()
             env_vars = payload.get("data", {}).get("data")
-            if env_vars is {}:
+            if env_vars == {}:
                 logger.error("Vault secret response missing data.data")
                 return {}
 
@@ -276,8 +306,8 @@ def _ensure_requirements_dict_or_list(node: Dict[str, Any]) -> None:
         node["requirements"] = {}
 
 def _get_envvar_requirement(node: Dict[str, Any]) -> List[Dict[str, str]]:
-    """
-    Return a reference to the EnvVarRequirement envDef list, creating it if needed.
+    """Return the EnvVarRequirement envDef list, creating it if needed.
+
     Supports CWL where 'requirements' may be a dict or a list of requirement objects.
     """
     reqs = node.get("requirements")
@@ -304,8 +334,8 @@ def _get_envvar_requirement(node: Dict[str, Any]) -> List[Dict[str, str]]:
     return reqs["EnvVarRequirement"]["envDef"]
 
 def _merge_env(env_def: List[Dict[str, str]], new_vars: Dict[str, Any], overwrite: bool = False) -> None:
-    """
-    Merge key/value pairs from new_vars into envDef.
+    """Merge key/value pairs from new_vars into envDef.
+
     If overwrite=False (default), keep existing values.
     """
     existing = {e.get("envName"): e for e in env_def if isinstance(e, dict) and "envName" in e}
@@ -323,8 +353,9 @@ def _merge_env(env_def: List[Dict[str, str]], new_vars: Dict[str, Any], overwrit
 def add_cwl_env_vars(cwl: Dict[str, Any],
                      thematic_service_env_vars: Dict[str, Any],
                      processing_stageout_env_vars: Dict[str, Any]) -> Dict[str, Any]:
-    """
-    Add env vars to CWL CommandLineTools:
+    """Add env vars to CWL CommandLineTools.
+
+    Behavior:
       - Always add processing_stage_env_vars to ALL CommandLineTools.
       - Add processing_stageout_env_vars ONLY to tools whose id is not in _SKIP_IDS.
     Creates requirements/EnvVarRequirement if missing. Does not overwrite existing envs.

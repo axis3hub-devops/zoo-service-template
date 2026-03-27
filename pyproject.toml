@@ -8,6 +8,12 @@ requires-python = ">=3.13"
 dependencies = [
     "boto3>=1.38.32",
     "cwltool>=3.1.20250110105449",
+    "urllib3==2.6.3",
+    "ruff",
+    "pydocstyle",
+    "yml>=0.0.1",
+    "pyyaml>=6.0.3",
+    "loguru>=0.7.3",
 ]
 
 [dependency-groups]
@@ -20,3 +26,35 @@ dev = [
 [pytest]
 [tool.pytest.ini_options]
 testpaths=["tests"]
+
+[tool.ruff]
+include = ["pyproject.toml", "tests/*.py", "**/__init__.py", "**/cwl_helper.py"]
+line-length = 180
+force-exclude = true
+extend-exclude = ["{{cookiecutter.service_name}}/service.py"]
+
+[tool.ruff.lint]
+select = ["E", "F"]
+extend-select = ["I"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/test_finalize_cwl.py" = ["E402"]
+
+[tool.towncrier]
+package = "src"
+directory = "newsfragments"
+filename = "CHANGELOG.md"
+
+[tool.towncrier.fragment.feature]
+[tool.towncrier.fragment.fix]
+[tool.towncrier.fragment.removal]
+
+[tool.towncrier.fragment.misc]
+name = "Misc"
+showcontent = true
+
+[tool.towncrier.fragment.doc]
+
+[tool.pydocstyle]
+match = "(?!service\\.py$).*\\.py"
+match_dir = "^(?!(.venv|tests|e2e|migration)).*"
