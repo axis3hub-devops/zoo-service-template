@@ -1,6 +1,7 @@
-import yaml
 import sys
 from pathlib import Path
+
+import yaml
 
 TEMPLATE_DIR = Path(__file__).resolve().parent.parent / "{{cookiecutter.service_name}}"
 sys.path.insert(0, str(TEMPLATE_DIR))

@@ -1,9 +1,8 @@
-import requests
 import json
+from typing import Any, Dict, List
 
+import requests
 from loguru import logger
-from typing import Dict, Any, List
-
 
 _SKIP_IDS = {"data_analysis_results_interceptor", "process_results_interceptor", "s3_upload_interceptor"}
 
@@ -255,7 +254,7 @@ def get_vault_secret_values(
 
             payload = resp.json()
             env_vars = payload.get("data", {}).get("data")
-            if env_vars is {}:
+            if env_vars == {}:
                 logger.error("Vault secret response missing data.data")
                 return {}
 
