@@ -4,7 +4,6 @@ import types
 from pathlib import Path
 
 import pytest
-from cookiecutter.main import cookiecutter
 
 
 def _mock_runtime_dependencies():
@@ -25,6 +24,11 @@ def _mock_runtime_dependencies():
 
 @pytest.fixture(scope="session")
 def rendered_service_module(tmp_path_factory):
+    cookiecutter_main = pytest.importorskip(
+        "cookiecutter.main",
+        reason="cookiecutter is required to render the template-backed service module tests",
+    )
+    cookiecutter = cookiecutter_main.cookiecutter
     template_root = Path(__file__).resolve().parent.parent
     output_root = tmp_path_factory.mktemp("cookiecutter-render")
     config_path = output_root / "cookiecutter-test-config.yaml"
