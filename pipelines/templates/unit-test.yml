@@ -67,8 +67,9 @@ jobs:
                 cliSources: "."
                 extraProperties: |
                     sonar.sources=.
-                    sonar.coverage.exclusions=tests/**
+                    sonar.exclusions={{cookiecutter.service_name}}/service.py
                     sonar.python.coverage.reportPaths=$(System.DefaultWorkingDirectory)/coverage.xml
+                    sonar.python.version=3.12
 
           - task: SonarQubeAnalyze@7
             displayName: "SonarQube Analyze"
@@ -80,3 +81,79 @@ jobs:
             inputs:
                 pollingTimeoutSec: "300"
             continueOnError: true
+
+    - job: RenderedProjectQuality
+      displayName: "Rendered Project Tests"
+      dependsOn: UnitTests
+      condition: succeeded()
+
+      steps:
+          - script: |
+                wget -qO- https://astral.sh/uv/install.sh | sh
+            displayName: "Install UV"
+
+          - script: |
+                source $HOME/.local/bin/env
+                uv sync
+            displayName: "Sync dependencies"
+
+          - script: |
+                source $HOME/.local/bin/env
+                uv run python - <<'PY'
+                import os
+                import shutil
+                from pathlib import Path
+
+                from cookiecutter.main import cookiecutter
+
+                workspace = Path(os.environ["SYSTEM_DEFAULTWORKINGDIRECTORY"])
+                output_root = workspace / ".sonar-rendered"
+                if output_root.exists():
+                    shutil.rmtree(output_root)
+                output_root.mkdir(parents=True, exist_ok=True)
+
+                config_path = output_root / "cookiecutter-sonar-config.yaml"
+                config_path.write_text(
+                    f"cookiecutters_dir: '{output_root / '.cookiecutters'}'\n"
+                    f"replay_dir: '{output_root / '.cookiecutter_replay'}'\n"
+                    "default_context: {}\n"
+                    "abbreviations:\n"
+                    "  gh: https://github.com/{0}.git\n"
+                    "  gl: https://gitlab.com/{0}.git\n"
+                    "  bb: https://bitbucket.org/{0}.git\n"
+                )
+
+                rendered_project = Path(
+                    cookiecutter(
+                        str(workspace),
+                        no_input=True,
+                        output_dir=str(output_root),
+                        config_file=str(config_path),
+                        overwrite_if_exists=True,
+                        extra_context={
+                            "service_name": "sonar_rendered_service",
+                            "workflow_id": "sonar-rendered-workflow",
+                        },
+                    )
+                ).resolve()
+
+                print(f"Rendered project for Sonar: {rendered_project}")
+                print(f"##vso[task.setvariable variable=SONAR_RENDERED_DIR]{rendered_project}")
+                PY
+            displayName: "Render Cookiecutter Project For Sonar"
+
+          - script: |
+                source $HOME/.local/bin/env
+                mkdir -p report
+                uv run pytest tests/test_upload_logs_to_s3.py \
+                  --junitxml=report/rendered-test-results.xml
+            displayName: "Run tests against rendered project"
+            env:
+                RENDERED_SERVICE_DIR: $(SONAR_RENDERED_DIR)
+
+          - task: PublishTestResults@2
+            displayName: "Publish Rendered Test Results"
+            inputs:
+                testResultsFormat: "JUnit"
+                testResultsFiles: "$(System.DefaultWorkingDirectory)/report/rendered-test-results.xml"
+                failTaskOnFailedTests: true

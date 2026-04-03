@@ -1,0 +1,2 @@
+- Implemented retry with exponential backoff and jitter for S3 log uploads in the cookiecutter service template. 
+- Added a dedicated rendered job in pipelines in order to run tests with coverage on generated code and run SonarQube analysis on the rendered output
