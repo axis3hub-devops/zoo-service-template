@@ -147,8 +147,6 @@ jobs:
                 source $HOME/.local/bin/env
                 mkdir -p report
                 uv run pytest tests/test_upload_logs_to_s3.py \
-                  --cov="$(SONAR_RENDERED_DIR)" \
-                  --cov-report=xml:$(System.DefaultWorkingDirectory)/rendered-coverage.xml \
                   --junitxml=report/rendered-test-results.xml
             displayName: "Run tests against rendered project"
             env:
@@ -160,10 +158,3 @@ jobs:
                 testResultsFormat: "JUnit"
                 testResultsFiles: "$(System.DefaultWorkingDirectory)/report/rendered-test-results.xml"
                 failTaskOnFailedTests: true
-
-          - task: PublishCodeCoverageResults@1
-            displayName: "Publish Rendered Code Coverage"
-            inputs:
-                codeCoverageTool: "Cobertura"
-                summaryFileLocation: "$(System.DefaultWorkingDirectory)/rendered-coverage.xml"
-                pathToSources: "$(SONAR_RENDERED_DIR)"
