@@ -69,6 +69,8 @@ jobs:
                     sonar.sources=.
                     sonar.coverage.exclusions=tests/**
                     sonar.python.coverage.reportPaths=$(System.DefaultWorkingDirectory)/coverage.xml
+                    sonar.python.version=3.12
+                    sonar.exclusions={{cookiecutter.service_name}}/service.py
 
           - task: SonarQubeAnalyze@7
             displayName: "SonarQube Analyze"
