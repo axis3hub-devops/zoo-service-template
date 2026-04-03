@@ -1,4 +1,5 @@
 import importlib.util
+import os
 import sys
 import types
 from pathlib import Path
@@ -24,36 +25,42 @@ def _mock_runtime_dependencies():
 
 @pytest.fixture(scope="session")
 def rendered_service_module(tmp_path_factory):
-    cookiecutter_main = pytest.importorskip(
-        "cookiecutter.main",
-        reason="cookiecutter is required to render the template-backed service module tests",
-    )
-    cookiecutter = cookiecutter_main.cookiecutter
-    template_root = Path(__file__).resolve().parent.parent
-    output_root = tmp_path_factory.mktemp("cookiecutter-render")
-    config_path = output_root / "cookiecutter-test-config.yaml"
-    config_path.write_text(
-        f"cookiecutters_dir: '{output_root / '.cookiecutters'}'\n"
-        f"replay_dir: '{output_root / '.cookiecutter_replay'}'\n"
-        "default_context: {}\n"
-        "abbreviations:\n"
-        "  gh: https://github.com/{0}.git\n"
-        "  gl: https://gitlab.com/{0}.git\n"
-        "  bb: https://bitbucket.org/{0}.git\n"
-    )
-    rendered_project = Path(
-        cookiecutter(
-            str(template_root),
-            no_input=True,
-            output_dir=str(output_root),
-            config_file=str(config_path),
-            extra_context={
-                "workflow_id": "test-workflow",
-                "service_name": "rendered_service",
-            },
+    rendered_service_dir = os.environ.get("RENDERED_SERVICE_DIR")
+    if rendered_service_dir:
+        rendered_project = Path(rendered_service_dir).resolve()
+    else:
+        cookiecutter_main = pytest.importorskip(
+            "cookiecutter.main",
+            reason="cookiecutter is required to render the template-backed service module tests",
         )
-    )
+        cookiecutter = cookiecutter_main.cookiecutter
+        template_root = Path(__file__).resolve().parent.parent
+        output_root = tmp_path_factory.mktemp("cookiecutter-render")
+        config_path = output_root / "cookiecutter-test-config.yaml"
+        config_path.write_text(
+            f"cookiecutters_dir: '{output_root / '.cookiecutters'}'\n"
+            f"replay_dir: '{output_root / '.cookiecutter_replay'}'\n"
+            "default_context: {}\n"
+            "abbreviations:\n"
+            "  gh: https://github.com/{0}.git\n"
+            "  gl: https://gitlab.com/{0}.git\n"
+            "  bb: https://bitbucket.org/{0}.git\n"
+        )
+        rendered_project = Path(
+            cookiecutter(
+                str(template_root),
+                no_input=True,
+                output_dir=str(output_root),
+                config_file=str(config_path),
+                extra_context={
+                    "workflow_id": "test-workflow",
+                    "service_name": "rendered_service",
+                },
+            )
+        )
     service_path = rendered_project / "service.py"
+    if not service_path.is_file():
+        raise RuntimeError(f"Rendered service module was not found at {service_path}")
 
     _mock_runtime_dependencies()
 
