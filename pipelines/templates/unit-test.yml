@@ -1,6 +1,6 @@
 jobs:
     - job: UnitTests
-      displayName: "Tests"
+      displayName: "Tests and Sonar Analysis"
       dependsOn: CheckSyntax
       condition: succeeded()
 
@@ -57,8 +57,34 @@ jobs:
                 summaryFileLocation: "$(System.DefaultWorkingDirectory)/coverage.xml"
                 pathToSources: "$(System.DefaultWorkingDirectory)"
 
+          - task: SonarQubePrepare@7
+            displayName: "SonarQube Prepare"
+            inputs:
+                SonarQube: "sonarqube-pk-hellas"
+                scannerMode: "cli"
+                configMode: "manual"
+                cliProjectKey: "P24E2841_AXIS_3_Governmental_Hub_zoo_service_template_7a689edd-c37b-4ede-800a-b01e42df6c92"
+                cliSources: "."
+                extraProperties: |
+                    sonar.sources=.
+                    sonar.coverage.exclusions=tests/**
+                    sonar.exclusions={{cookiecutter.service_name}}/service.py
+                    sonar.python.coverage.reportPaths=$(System.DefaultWorkingDirectory)/coverage.xml
+                    sonar.python.version=3.12
+
+          - task: SonarQubeAnalyze@7
+            displayName: "SonarQube Analyze"
+            inputs:
+                jdkversion: "JAVA_HOME_17_X64"
+
+          - task: SonarQubePublish@7
+            displayName: "SonarQube Publish"
+            inputs:
+                pollingTimeoutSec: "300"
+            continueOnError: true
+
     - job: RenderedProjectQuality
-      displayName: "Rendered Project Tests and Sonar Analysis"
+      displayName: "Rendered Project Tests"
       dependsOn: UnitTests
       condition: succeeded()
 
@@ -141,27 +167,3 @@ jobs:
                 codeCoverageTool: "Cobertura"
                 summaryFileLocation: "$(System.DefaultWorkingDirectory)/rendered-coverage.xml"
                 pathToSources: "$(SONAR_RENDERED_DIR)"
-
-          - task: SonarQubePrepare@7
-            displayName: "SonarQube Prepare"
-            inputs:
-                SonarQube: "sonarqube-pk-hellas"
-                scannerMode: "cli"
-                configMode: "manual"
-                cliProjectKey: "P24E2841_AXIS_3_Governmental_Hub_zoo_service_template_7a689edd-c37b-4ede-800a-b01e42df6c92"
-                cliSources: "."
-                extraProperties: |
-                    sonar.projectBaseDir=$(SONAR_RENDERED_DIR)
-                    sonar.python.coverage.reportPaths=$(System.DefaultWorkingDirectory)/rendered-coverage.xml
-                    sonar.python.version=3.12
-
-          - task: SonarQubeAnalyze@7
-            displayName: "SonarQube Analyze"
-            inputs:
-                jdkversion: "JAVA_HOME_17_X64"
-
-          - task: SonarQubePublish@7
-            displayName: "SonarQube Publish"
-            inputs:
-                pollingTimeoutSec: "300"
-            continueOnError: true
