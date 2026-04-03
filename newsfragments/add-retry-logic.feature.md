@@ -1,0 +1,1 @@
+implemented retry with exponential backoff and jitter for S3 log uploads in the cookiecutter service template

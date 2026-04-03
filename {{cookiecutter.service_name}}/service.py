@@ -1,11 +1,18 @@
 # see https://zoo-project.github.io/workshops/2014/first_service.html#f1
+import json
+import os
 import pathlib
-import sys
+import random
 import re
-from typing import Dict
+import sys
+import time
+import traceback
 from pathlib import Path
 
 import boto3
+import yaml
+from loguru import logger
+from zoo_calrissian_runner import ExecutionHandler, ZooCalrissianRunner
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import cwl_helper
@@ -15,6 +22,10 @@ import cwl_helper
 THEMATIC_SERVICES_KUBERNETES_MAPPING = {}
 
 THEMATIC_SERVICES_VAULT_MAPPING = {}
+
+S3_UPLOAD_MAX_ATTEMPTS = 3
+S3_UPLOAD_BACKOFF_BASE_SECONDS = 2
+S3_UPLOAD_JITTER_MAX_SECONDS = 1.0
 
 
 try:
@@ -33,16 +44,6 @@ except ImportError:
             print(f"invoked _ with {message}")
 
     zoo = ZooStub()
-
-import json
-import os
-
-import yaml
-from loguru import logger
-from zoo_calrissian_runner import ExecutionHandler, ZooCalrissianRunner
-
-# For DEBUG
-import traceback
 
 logger.remove()
 logger.add(sys.stderr, level="INFO")
@@ -85,12 +86,12 @@ class EoepcaCalrissianRunnerExecutionHandler(ExecutionHandler):
             self.vault_user = self.conf['pod_env_vars']["VAULT_USER"]
             self.vault_password = self.conf['pod_env_vars']["VAULT_PASSWORD"]
             self.vault_url = self.conf['pod_env_vars']["VAULT_URL"]
-            self.aws_access_key_id  = self.conf['pod_env_vars']["AWS_ACCESS_KEY_ID"]
-            self.aws_secret_access_key =  self.conf['pod_env_vars']["AWS_SECRET_ACCESS_KEY"]
+            self.aws_access_key_id = self.conf['pod_env_vars']["AWS_ACCESS_KEY_ID"]
+            self.aws_secret_access_key = self.conf['pod_env_vars']["AWS_SECRET_ACCESS_KEY"]
         except Exception as e:
             logger.error("Setting  service template issue: " + str(e))
             logger.error(traceback.format_exc())
-            raise(e)
+            raise
 
     def _set_process_infos_input(self):
         logger.info("Adding Process infos")
@@ -172,7 +173,7 @@ class EoepcaCalrissianRunnerExecutionHandler(ExecutionHandler):
             self.restore_http_proxy_env()
 
     def upload_logs_to_s3(self, s3_bucket: str, process_id: str, tool_logs: list = None,
-                          aws_access_key_id=None, aws_secret_access_key=None):
+                          aws_access_key_id=None, aws_secret_access_key=None) -> bool:
         """
         Upload log files to S3:
         - Uploads each file from `tool_logs` (assumed relative to workdir).
@@ -185,27 +186,28 @@ class EoepcaCalrissianRunnerExecutionHandler(ExecutionHandler):
         try:
             logger.info(
                 f"Creating S3 client "
-                f"(endpoint={endpoint_url}, region={region_name}, "
-                f"access_key={aws_access_key_id})"
-                f"secret={aws_secret_access_key})"
+                f"(endpoint={endpoint_url}, region={region_name})"
             )
-            s3 = boto3.client(
-                        "s3",
-                        aws_access_key_id=str(aws_access_key_id),
-                        aws_secret_access_key=str(aws_secret_access_key),
-                        region_name=region_name,
-                        endpoint_url=endpoint_url,
-                    )
+            s3_client_kwargs = {
+                "service_name": "s3",
+                "region_name": region_name,
+                "endpoint_url": endpoint_url,
+            }
+            if aws_access_key_id is not None:
+                s3_client_kwargs["aws_access_key_id"] = aws_access_key_id
+            if aws_secret_access_key is not None:
+                s3_client_kwargs["aws_secret_access_key"] = aws_secret_access_key
+            s3 = boto3.client(**s3_client_kwargs)
 
         except Exception as e:
             logger.error(
                 f"Failed to create S3 client (endpoint={endpoint_url}, region={region_name}): {e}"
             )
-            return
+            return False
 
         if not tool_logs:
-            logger.error("No tool logs were found!")
-            return
+            logger.info("No tool logs were found!")
+            return True
 
         # Construct the execution workdir
         workdir_name = f"{(self.conf['lenv']['Identifier']).replace('_', '-')}-{self.conf['lenv']['usid']}"
@@ -226,7 +228,7 @@ class EoepcaCalrissianRunnerExecutionHandler(ExecutionHandler):
 
             # Build absolute path under the workdir
             log_path = os.path.join(workdir, tlog.lstrip("./"))
-            logger.debug(f"Resolved tool log '{tlog}' → '{log_path}'")
+            logger.debug(f"Resolved tool log '{tlog}' -> '{log_path}'")
 
             if not os.path.isfile(log_path):
                 logger.info(f"Tool log not found: {log_path}")
@@ -238,11 +240,34 @@ class EoepcaCalrissianRunnerExecutionHandler(ExecutionHandler):
                 fname = "report.log"
                 key = f"processing-results/{process_id}/{fname}"
 
-            try:
-                s3.upload_file(log_path, s3_bucket, key)
-                logger.info(f"Uploaded tool log {log_path}  s3://{s3_bucket}/{key}")
-            except Exception as e:
-                logger.error(f"Failed to upload tool log {log_path}: {e}")
+            upload_succeeded = False
+            for attempt in range(1, S3_UPLOAD_MAX_ATTEMPTS + 1):
+                try:
+                    s3.upload_file(log_path, s3_bucket, key)
+                    logger.info(f"Uploaded tool log {log_path} -> s3://{s3_bucket}/{key}")
+                    upload_succeeded = True
+                    break
+                except Exception as e:
+                    if attempt < S3_UPLOAD_MAX_ATTEMPTS:
+                        delay = (
+                            S3_UPLOAD_BACKOFF_BASE_SECONDS ** attempt
+                            + random.uniform(0, S3_UPLOAD_JITTER_MAX_SECONDS)
+                        )
+                        logger.warning(
+                            f"Upload attempt {attempt}/{S3_UPLOAD_MAX_ATTEMPTS} "
+                            f"failed for {log_path}: {e}. "
+                            f"Retrying in {delay:.1f}s..."
+                        )
+                        time.sleep(delay)
+                    else:
+                        logger.error(
+                            f"Failed to upload {log_path} after "
+                            f"{S3_UPLOAD_MAX_ATTEMPTS} attempts: {e}"
+                        )
+            if not upload_succeeded:
+                return False
+
+        return True
 
     def _get_env_var(self, prefix):
         identifier = '{}_{}'.format(prefix, self.thematic_service_name.upper())
@@ -265,14 +290,16 @@ class EoepcaCalrissianRunnerExecutionHandler(ExecutionHandler):
             # Upload only CWL tool logs
             logger.info(f"Uploading tool logs to s3://{bucket}/processing-results/{process_id}/")
             if tool_logs is not None:
-                tool_logs.append("./report.json")
-                self.upload_logs_to_s3(
+                tool_logs_to_upload = [*tool_logs, "./report.json"]
+                upload_success = self.upload_logs_to_s3(
                     bucket,
                     process_id,
-                    tool_logs,
-                self.aws_access_key_id,
-                self.aws_secret_access_key
+                    tool_logs_to_upload,
+                    self.aws_access_key_id,
+                    self.aws_secret_access_key
                 )
+                if not upload_success:
+                    logger.warning("One or more tool logs could not be uploaded to S3.")
 
         except Exception as e:
             logger.error("ERROR in post_execution_hook...")
@@ -524,7 +551,6 @@ def {{cookiecutter.workflow_id |replace("-", "_")  }}(conf, inputs, outputs): # 
         )
 
         input_request = conf['request']['jrequest']
-        json_input_request = json.loads(input_request)
         json_inputs = json.loads(input_request)['inputs']
         process_scope = "indexing"
         if "scope" in json_inputs and json_inputs["scope"] == "generic":
