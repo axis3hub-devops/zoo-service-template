@@ -68,7 +68,7 @@ jobs:
                 extraProperties: |
                     sonar.sources=.
                     sonar.coverage.exclusions=tests/**
-                    sonar.exclusions={{cookiecutter.service_name}}/service.py
+                    sonar.exclusions=**/\{\{cookiecutter.*\}\}/**
                     sonar.python.coverage.reportPaths=$(System.DefaultWorkingDirectory)/coverage.xml
                     sonar.python.version=3.12
 
