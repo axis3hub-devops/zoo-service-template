@@ -299,7 +299,7 @@ class EoepcaCalrissianRunnerExecutionHandler(ExecutionHandler):
                     self.aws_secret_access_key
                 )
                 if not upload_success:
-                    logger.warning("One or more tool logs could not be uploaded to S3.")
+                    raise RuntimeError("One or more tool logs could not be uploaded to S3.")
 
         except Exception as e:
             logger.error("ERROR in post_execution_hook...")
