@@ -67,10 +67,9 @@ jobs:
                 cliSources: "."
                 extraProperties: |
                     sonar.sources=.
-                    sonar.coverage.exclusions=tests/**
+                    sonar.coverage.exclusions=tests/**,{{cookiecutter.service_name}}/service.py
                     sonar.python.coverage.reportPaths=$(System.DefaultWorkingDirectory)/coverage.xml
                     sonar.python.version=3.12
-                    sonar.exclusions={{cookiecutter.service_name}}/service.py
 
           - task: SonarQubeAnalyze@7
             displayName: "SonarQube Analyze"
