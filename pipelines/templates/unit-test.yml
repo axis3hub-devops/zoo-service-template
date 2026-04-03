@@ -149,9 +149,9 @@ jobs:
                 scannerMode: "cli"
                 configMode: "manual"
                 cliProjectKey: "P24E2841_AXIS_3_Governmental_Hub_zoo_service_template_7a689edd-c37b-4ede-800a-b01e42df6c92"
-                cliSources: "$(SONAR_RENDERED_DIR)"
+                cliSources: "."
                 extraProperties: |
-                    sonar.sources=.
+                    sonar.projectBaseDir=$(SONAR_RENDERED_DIR)
                     sonar.python.coverage.reportPaths=$(System.DefaultWorkingDirectory)/rendered-coverage.xml
                     sonar.python.version=3.12
 
