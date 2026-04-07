@@ -27,17 +27,17 @@ jobs:
           ENCODED_PROJECT=$(echo -n "$PROJECT" | sed 's/ /%20/g')
 
           BODY=$(cat <<EOF
-{
-  "resources": {
-    "repositories": {
-      "self": {
-        "refName": "refs/heads/$BRANCH"
-      }
-    }
-  }
-}
-EOF
-)
+          {
+            "resources": {
+              "repositories": {
+                "self": {
+                  "refName": "refs/heads/$BRANCH"
+                }
+              }
+            }
+          }
+          EOF
+          )
 
           curl -s -X POST \
             -H "Authorization: Basic $AUTH" \
