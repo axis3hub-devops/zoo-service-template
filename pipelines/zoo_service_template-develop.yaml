@@ -1,0 +1,38 @@
+name: ZOO-Service-Template-Develop-Pipeline 
+
+trigger: 
+  branches:
+    include:
+      - develop
+  tags:
+    include:
+      - '*'
+
+pool:
+    name: Axis3
+
+variables:
+    - group: Github-devops
+    - group: AWS-Service-User
+    - name: APP_NAME
+      value: "zoo_service_template"
+
+stages:
+    - stage: Test
+      displayName: "Run Tests"
+      jobs:
+          - template: templates/check-syntax.yml
+            parameters:
+                dependsOnFragmentCheck: false
+          - template: templates/unit-test.yml
+    - stage: TriggerZOO
+      displayName: "Trigger ZOO Develop CI-CD Pipeline"
+      jobs:
+        - template: templates/trigger-zoo-pipeline.yml
+          parameters:
+            org: "tfs.planetek.it"
+            project: "P24E2841_AXIS 3_Governmental_Hub"
+            pipelineId: 181
+            branch: "develop"
+
+    
