@@ -1,0 +1,51 @@
+parameters:
+  LIBRARY_TAG: ""
+  APP_NAME: ""
+
+jobs:
+    - job: UpdateVersion
+      displayName: "Update Version"
+      condition: succeeded()
+      steps:
+          - checkout: self
+            persistCredentials: true
+
+          - checkout: ecrTemplates
+            persistCredentials: true
+
+          - script: |
+                set -ex
+
+                echo "Using version tag: ${{ parameters.LIBRARY_TAG }}"
+                echo "App name: ${{ parameters.APP_NAME }}"
+
+                cd ecrTemplates
+
+                LIBRARY_TAG="${{ parameters.LIBRARY_TAG }}"
+                MARKDOWN_FILE_PATH="${{ parameters.APP_NAME }}-artifact-versions.md"
+                touch $MARKDOWN_FILE_PATH
+
+                echo "Current content:"
+                cat "$MARKDOWN_FILE_PATH"
+
+                if grep -qE "^- $LIBRARY_TAG$" $MARKDOWN_FILE_PATH; then
+                    echo "Artifact version $LIBRARY_TAG already exists in $MARKDOWN_FILE_PATH. Nothing to do."
+                else
+                    echo "Updating $MARKDOWN_FILE_PATH..."
+                    while [ "$(wc -l < $MARKDOWN_FILE_PATH)" -lt 3 ]; do echo >> $MARKDOWN_FILE_PATH; done
+                    sed -i "3i\- $LIBRARY_TAG" $MARKDOWN_FILE_PATH
+                    
+                    echo "Updated content:"
+                    cat "$MARKDOWN_FILE_PATH"
+                    
+                    echo "Committing..."
+                    git add "$MARKDOWN_FILE_PATH"
+                    git commit -m "Update artifact versions list"
+                    git push origin HEAD:main
+                fi
+            displayName: "Generate and commit artifact versions list"
+            env:
+                AWS_ACCESS_KEY_ID: $(AWS_ACCESS_KEY_ID)
+                AWS_SECRET_ACCESS_KEY: $(AWS_SECRET_ACCESS_KEY)
+                AWS_REGION: $(AWS_REGION)
+                AWS_ACCOUNT_ID: $(AWS_ACCOUNT_ID)

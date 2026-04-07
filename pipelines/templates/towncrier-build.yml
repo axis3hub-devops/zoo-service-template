@@ -1,0 +1,65 @@
+jobs:
+    - job: BuildTowncrier
+      displayName: "Towncrier build"
+      steps:
+          - checkout: self
+            persistCredentials: true
+
+          - script: |
+                wget -qO- https://astral.sh/uv/install.sh | sh
+            displayName: "Install uv"
+
+          - script: |
+                source $HOME/.local/bin/env
+                uv sync
+                source .venv/bin/activate
+
+                # Ensure Python can find your package
+                export PYTHONPATH=$(pwd):$PYTHONPATH
+
+                TODAY=$(date +%F)
+
+                echo "Running Towncrier build"
+                files=$(ls ./newsfragments | grep -E "\.feature|\.fix|\.doc|\.removal|\.misc$" | wc     -l)
+                if [ "$files" -gt 0 ]; then
+                    echo "Setting Azure DevOps remote"
+                    git remote set-url origin $(Build.Repository.Uri)
+
+                    echo "Pull latest changes from Azure DevOps"
+                    git pull origin main --ff-only
+                  
+                    echo "Running Towncrier build..."
+                    uv run towncrier build --version "$LIBRARY_TAG" --yes --date "$TODAY"
+
+                    echo "Commit Towncrier changelog"
+                    git add -A
+                    git commit -m "feat: Update CHANGELOG.md via Towncrier [skip ci]" || echo "Nothing to commit."
+                    
+                    echo "Creating git tag $LIBRARY_TAG..."
+                    git tag $LIBRARY_TAG
+
+                    echo "Pushing git tag $LIBRARY_TAG..."
+                    git push origin $LIBRARY_TAG
+
+                    echo "Push Towncrier changelog to main"
+                    git push origin HEAD:main
+
+                    echo "Merge and pull main into develop..."
+                    git checkout develop
+                    git pull origin develop
+                    git merge origin/main
+
+                    echo "Removing newsfragments..."
+                    find newsfragments/ -type f | grep -E '\.(fix|misc|feature|doc|removal)\.md$' | xargs -r rm -f || echo "No newsfragments to remove."
+
+                    git add -A
+                    git commit -m "feat: Merge main and remove fragments [skip ci]" || echo "Nothing to commit."
+                    echo "Pushing develop..."
+                    git push origin develop
+                else
+                  echo "No need to update the CHANGELOG since not newsfragments have been found."
+                fi
+            displayName: "Build and push Towncrier changelog"
+            env:
+                System.AccessToken: $(System.AccessToken)
+                LIBRARY_TAG: $(LIBRARY_TAG)
