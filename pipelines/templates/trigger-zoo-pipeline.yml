@@ -35,6 +35,12 @@ jobs:
           echo "PIPELINE_ID: $PIPELINE_ID"
           echo "BRANCH: $BRANCH"
 
+          echo "Testing DNS resolution..."
+          nslookup $ORG || true
+
+          echo "Testing connectivity..."
+          curl -v https://$ORG || true
+
           echo "Calling TFS Build API..."
 
           RESPONSE=$(curl -s -w "\nHTTP_STATUS:%{http_code}" -X POST \
