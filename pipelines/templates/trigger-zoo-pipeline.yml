@@ -1,0 +1,51 @@
+parameters:
+  - name: org
+    type: string
+  - name: project
+    type: string
+  - name: pipelineId
+    type: number
+  - name: branch
+    type: string
+    default: develop
+
+jobs:
+  - job: TriggerZoo
+    displayName: "Trigger ZOO CI-CD Pipeline"
+    steps:
+      - script: |
+          echo "Triggering ZOO CI-CD pipeline..."
+
+          ORG="${{ parameters.org }}"
+          PROJECT="${{ parameters.project }}"
+          PIPELINE_ID="${{ parameters.pipelineId }}"
+          BRANCH="${{ parameters.branch }}"
+          TOKEN="$(System.AccessToken)"
+          AUTH=$(echo -n ":$TOKEN" | base64)
+
+          # Encode project name for URL
+          ENCODED_PROJECT=$(echo -n "$PROJECT" | sed 's/ /%20/g')
+
+          BODY=$(cat <<EOF
+{
+  "resources": {
+    "repositories": {
+      "self": {
+        "refName": "refs/heads/$BRANCH"
+      }
+    }
+  }
+}
+EOF
+)
+
+          curl -s -X POST \
+            -H "Authorization: Basic $AUTH" \
+            -H "Content-Type: application/json" \
+            -d "$BODY" \
+            "https://$ORG/$ENCODED_PROJECT/_apis/pipelines/$PIPELINE_ID/runs?api-version=7.1-preview.1"
+
+          echo "ZOO Develop CI-CD pipeline triggered."
+        displayName: "Trigger ZOO pipeline"
+        env:
+          System.AccessToken: $(System.AccessToken)

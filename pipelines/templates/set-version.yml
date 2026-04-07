@@ -1,0 +1,25 @@
+jobs:
+    - job: ReadVersion
+      displayName: "Read version from version.txt"
+      condition: succeeded()
+      steps:
+          - script: |
+                ls -la
+                if [ ! -f "version.txt" ]; then
+                  echo "version.txt not found!"
+                  exit 1
+                fi
+
+                VERSION_CONTENT=$(cat version.txt)
+                SEMVER_REGEX="^[0-9]+\.[0-9]+\.[0-9]+$"
+
+                if ! [[ "$VERSION_CONTENT" =~ $SEMVER_REGEX ]]; then
+                  echo "Error: Content of version.txt ('$VERSION_CONTENT') is not in the correct X.Y.Z format."
+                  exit 1
+                fi
+
+                VERSION="v$VERSION_CONTENT"
+                echo "Version from file: $VERSION"
+                echo "##vso[task.setvariable variable=LIBRARY_TAG_OUTPUT;isOutput=true]$VERSION"
+            displayName: "Read version from version.txt"
+            name: "SetImageTag"
