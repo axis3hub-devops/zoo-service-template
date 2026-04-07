@@ -25,6 +25,38 @@ stages:
             parameters:
                 dependsOnFragmentCheck: false
           - template: templates/unit-test.yml
+
+    - stage: Versioning
+      dependsOn: Run Tests
+      displayName: "Set Version"
+      jobs:
+          - template: templates/set-version.yml
+
+    - stage: Towncrier
+      dependsOn: Versioning
+      condition: succeeded()
+      variables:
+        - name: LIBRARY_TAG
+          value: $[ stageDependencies.Versioning.ReadVersion.outputs['SetImageTag.LIBRARY_TAG_OUTPUT'] ]
+      jobs:
+          - template: templates/towncrier-build.yml
+
+    - stage: UpdateVersionList
+      displayName: "Update Version List"
+      dependsOn:
+          - Versioning
+          - BuildAndPush
+      condition: succeeded()
+      variables:
+        - name: LIBRARY_TAG
+          value: $[ stageDependencies.Versioning.ReadVersion.outputs['SetImageTag.LIBRARY_TAG_OUTPUT'] ]
+      jobs:
+          - template: templates/update-version.yml
+            parameters:
+                LIBRARY_TAG: "$(LIBRARY_TAG)"
+                APP_NAME: "$(APP_NAME)"
+
+
     - stage: TriggerZOO
       displayName: "Trigger ZOO Main CI-CD Pipeline"
       jobs:
