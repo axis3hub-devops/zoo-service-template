@@ -20,32 +20,42 @@ jobs:
           PROJECT="${{ parameters.project }}"
           PIPELINE_ID="${{ parameters.pipelineId }}"
           BRANCH="${{ parameters.branch }}"
+
           TOKEN="$(System.AccessToken)"
           AUTH=$(echo -n ":$TOKEN" | base64)
 
-          # Encode project name for URL
+          # Encode project name (spaces → %20)
           ENCODED_PROJECT=$(echo -n "$PROJECT" | sed 's/ /%20/g')
 
-          BODY=$(cat <<EOF
-{
-  "resources": {
-    "repositories": {
-      "self": {
-        "refName": "refs/heads/$BRANCH"
-      }
-    }
-  }
-}
-EOF
-)
+          # Encode collection (hardcoded from your URL)
+          COLLECTION="Planetek%20Hellas"
 
-          curl -s -X POST \
-            -H "Authorization: Basic $AUTH" \
+          echo "ORG: $ORG"
+          echo "PROJECT: $PROJECT"
+          echo "PIPELINE_ID: $PIPELINE_ID"
+          echo "BRANCH: $BRANCH"
+
+          echo "Testing DNS resolution..."
+          nslookup $ORG || true
+
+          echo "Testing connectivity..."
+          curl -v https://$ORG || true
+
+          echo "Triggering via TFS API..."
+
+          RESPONSE=$(curl -k -v -w "\nHTTP_STATUS:%{http_code}" -X POST \
+            -H "Authorization: Bearer $TOKEN" \
             -H "Content-Type: application/json" \
-            -d "$BODY" \
-            "https://$ORG/$ENCODED_PROJECT/_apis/pipelines/$PIPELINE_ID/runs?api-version=7.1-preview.1"
+            -d '{
+                  "definition": {
+                    "id": '"$PIPELINE_ID"'
+                  }
+                }' \
+            "https://$ORG/$COLLECTION/$ENCODED_PROJECT/_apis/build/builds?api-version=6.0")
 
-          echo "ZOO Develop CI-CD pipeline triggered."
+          echo "$RESPONSE"
+
+          echo "Trigger step completed."
         displayName: "Trigger ZOO pipeline"
         env:
           System.AccessToken: $(System.AccessToken)
