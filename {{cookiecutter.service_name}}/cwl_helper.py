@@ -1,7 +1,7 @@
 """Helpers for finalizing CWL graphs and injecting environment variables."""
 
 import json
-from typing import Any, Dict, List
+from typing import Any, Dict
 
 import requests
 from loguru import logger
@@ -235,11 +235,11 @@ def finalize_cwl(cwl, execution_handler=None, is_indexing: bool = True):
         )
     pretty = json.dumps(cwl, indent=4)
 
-    # logger.info("---Finalized CWL --- Start")
+    logger.info("---Finalized CWL --- Start")
 
-    # for line in pretty.splitlines():
-    #     logger.info(line)
-    # logger.info("---Finalized CWL --- Start")
+    for line in pretty.splitlines():
+        logger.info(line)
+    logger.info("---Finalized CWL --- Start")
 
     return cwl
 
@@ -310,7 +310,7 @@ def _ensure_requirements_dict_or_list(node: Dict[str, Any]) -> None:
 
 def _get_envvar_requirement(node: Dict[str, Any]) -> Dict[str, Any]:
     """
-    Always normalize to:
+    Normalize env vars to the expected format for cwls.
     
     requirements:
       EnvVarRequirement:
@@ -383,6 +383,6 @@ def add_cwl_env_vars(cwl: Dict[str, Any],
         if tool_id not in _SKIP_IDS:
             _merge_env(env_def, thematic_service_env_vars, overwrite=True)
         logger.info(f"imerged env_def {str(env_def)}")
-    #logger.info(f"finalized cwl {str(cwl)}")
+    logger.info(f"finalized cwl {str(cwl)}")
 
     return cwl

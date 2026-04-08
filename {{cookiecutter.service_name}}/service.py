@@ -86,10 +86,6 @@ class EoepcaCalrissianRunnerExecutionHandler(ExecutionHandler):
             self.vault_user = self.conf['pod_env_vars']["VAULT_USER"]
             self.vault_password = self.conf['pod_env_vars']["VAULT_PASSWORD"]
             self.vault_url = self.conf['pod_env_vars']["VAULT_URL"]
-<<<<<<< HEAD
-            self.aws_access_key_id = self.conf['pod_env_vars']["AWS_ACCESS_KEY_ID"]
-            self.aws_secret_access_key = self.conf['pod_env_vars']["AWS_SECRET_ACCESS_KEY"]
-=======
             self.aws_access_key_id  = self.conf['pod_env_vars']["AWS_ACCESS_KEY_ID"]
             self.aws_secret_access_key =  self.conf['pod_env_vars']["AWS_SECRET_ACCESS_KEY"]
 
@@ -101,7 +97,6 @@ class EoepcaCalrissianRunnerExecutionHandler(ExecutionHandler):
                 logger.info("Running in AWS")
                 self.verify_tls = True
 
->>>>>>> c3fc77a (Add support for verify tls)
         except Exception as e:
             logger.error("Setting  service template issue: " + str(e))
             logger.error(traceback.format_exc())
